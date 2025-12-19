@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // ============================================
+    // REGRAS PARA DESENVOLVIMENTO
+    // IMPORTANTE: Atualizar antes de ir para produção!
+    // ============================================
+    
+    // Termos de Ciência - documentos escaneados/fotografados
+    match /termos-ciencia/{allPaths=**} {
+      allow read, write: if true;
+    }
+    
+    // Fotos de alunos
+    match /fotos-alunos/{allPaths=**} {
+      allow read, write: if true;
+    }
+    
+    // Outros documentos
+    match /documentos/{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}

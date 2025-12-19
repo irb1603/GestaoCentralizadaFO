@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // REGRAS PARA DESENVOLVIMENTO
+    // IMPORTANTE: Atualizar antes de ir para produção!
+    // ============================================
+    
+    // -----------------------------------------
+    // COLEÇÕES EXISTENTES
+    // -----------------------------------------
+    
+    // Coleção de usuários do sistema (Admin, Cmt, Sgte)
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    
+    // Coleção de alunos (dados pessoais, contatos, fotos)
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+    
+    // Coleção de fatos observados (registros de FO)
+    match /fatosObservados/{foId} {
+      allow read, write: if true;
+    }
+    
+    // Coleção de logs de auditoria
+    match /auditLog/{logId} {
+      allow read, write: if true;
+    }
+    
+    // Coleção de registradores de FO (professores/monitores)
+    match /foRegistradores/{registradorId} {
+      allow read, write: if true;
+    }
+    
+    // -----------------------------------------
+    // COLEÇÕES FUTURAS (já preparadas)
+    // -----------------------------------------
+    
+    // Notas de comportamento por aluno/período
+    match /comportamento/{compId} {
+      allow read, write: if true;
+    }
+    
+    // Configurações de e-mail por companhia
+    match /emailConfigs/{configId} {
+      allow read, write: if true;
+    }
+    
+    // Histórico de e-mails enviados
+    match /emailLogs/{logId} {
+      allow read, write: if true;
+    }
+    
+    // Registro de termos PDF gerados
+    match /termosGerados/{termoId} {
+      allow read, write: if true;
+    }
+    
+    // Processos disciplinares
+    match /processosDisciplinares/{processoId} {
+      allow read, write: if true;
+    }
+    
+    // Notas para aditamento ao BI
+    match /notasAditamento/{notaId} {
+      allow read, write: if true;
+    }
+    
+    // Configurações gerais do sistema
+    match /configuracoes/{configId} {
+      allow read, write: if true;
+    }
+    
+    // Termos de ciência escaneados/fotografados (metadados)
+    match /termosCiencia/{termoId} {
+      allow read, write: if true;
+    }
+  }
+}
