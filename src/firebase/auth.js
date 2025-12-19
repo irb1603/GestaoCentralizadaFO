@@ -226,15 +226,20 @@ export async function changePassword(targetUsername, newPassword) {
         throw new Error('Apenas administradores podem alterar senhas');
     }
 
-    if (!USER_ACCOUNTS[targetUsername]) {
+    const userConfig = USER_ACCOUNTS[targetUsername];
+    if (!userConfig) {
         throw new Error('Usuário não encontrado');
     }
 
-    await updateDoc(doc(db, 'users', targetUsername), {
+    // Use setDoc with merge to create document if it doesn't exist
+    await setDoc(doc(db, 'users', targetUsername), {
+        username: targetUsername,
         password: newPassword,
+        role: userConfig.role,
+        company: userConfig.company,
         updatedAt: new Date().toISOString(),
         updatedBy: session.username,
-    });
+    }, { merge: true });
 }
 
 /**
