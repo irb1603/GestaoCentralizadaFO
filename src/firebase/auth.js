@@ -231,15 +231,29 @@ export async function changePassword(targetUsername, newPassword) {
         throw new Error('Usuário não encontrado');
     }
 
-    // Use setDoc with merge to create document if it doesn't exist
-    await setDoc(doc(db, 'users', targetUsername), {
-        username: targetUsername,
-        password: newPassword,
-        role: userConfig.role,
-        company: userConfig.company,
-        updatedAt: new Date().toISOString(),
-        updatedBy: session.username,
-    }, { merge: true });
+    // Check if document exists
+    const userDocRef = doc(db, 'users', targetUsername);
+    const userDoc = await getDoc(userDocRef);
+
+    if (userDoc.exists()) {
+        // Update existing document
+        await updateDoc(userDocRef, {
+            password: newPassword,
+            updatedAt: new Date().toISOString(),
+            updatedBy: session.username,
+        });
+    } else {
+        // Create new document
+        await setDoc(userDocRef, {
+            username: targetUsername,
+            password: newPassword,
+            role: userConfig.role,
+            company: userConfig.company,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            updatedBy: session.username,
+        });
+    }
 }
 
 /**
