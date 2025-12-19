@@ -12,7 +12,7 @@ export function renderLoginPage() {
       <div class="login-card fade-in">
         <div class="login-card__header">
           <div class="login-card__logo">
-            ${icons.logo}
+            <img src="/images/CMB.jpeg" alt="Logo CMB" style="width: 100%; height: 100%; border-radius: 12px; object-fit: cover;">
           </div>
           <h1 class="login-card__title">Gestão Centralizada FO</h1>
           <p class="login-card__subtitle">Colégio Militar de Brasília</p>

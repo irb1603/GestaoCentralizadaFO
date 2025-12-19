@@ -67,17 +67,13 @@ function renderFOForm() {
         <!-- Header -->
         <div class="fo-header">
           <div class="fo-header__logos">
-            <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #1e3a8a, #1e40af); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">
-              ${icons.logo}
-            </div>
+            <img src="/images/CMB.jpeg" alt="Logo CMB" style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover;">
           </div>
           <div class="fo-header__title">
             <h1>Formulário de Ocorrência CMB</h1>
           </div>
           <div class="fo-header__logos">
-            <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #059669, #047857); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">
-              ${icons.logo}
-            </div>
+            <img src="/images/CMB.jpeg" alt="Logo CMB" style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover;">
           </div>
         </div>
         
@@ -93,6 +89,7 @@ function renderFOForm() {
               <li>Para múltiplos alunos, separe os números por vírgula COM ESPAÇO (ex: 123, 456)</li>
               <li>Os dados do aluno serão preenchidos automaticamente</li>
               <li>Verifique se os números estão corretos antes de enviar</li>
+              <li>Caso seja selecionado Fato observado Neutro, este fato não irá gerar nenhum tipo de sanção disciplinar ao aluno, mas ficará registrado em suas alterações</li>
             </ul>
           </div>
           
