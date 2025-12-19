@@ -2,7 +2,25 @@
   "permissions": {
     "allow": [
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh --version:*)",
+      "Bash(netlify:*)",
+      "Bash(brew:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh auth login:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(gh auth:*)",
+      "Bash(open \"https://github.com/irb1603/GestaoCentralizadaFO/security/secret-scanning/unblock-secret/374rA8YlOLySVqjfCcLLTC9MxMs\")",
+      "Bash(open \"https://github.com/irb1603/GestaoCentralizadaFO/security/secret-scanning/unblock-secret/374rA582k7tHJ1KO3SgtJaOJvDF\")",
+      "Bash(open \"https://github.com/irb1603/GestaoCentralizadaFO/security/secret-scanning/unblock-secret/374rA855Ys1mA5lr1kwPIX7FEmD\")",
+      "Bash(open \"https://app.netlify.com/start\")",
+      "Bash(npm run build:*)",
+      "Bash(tee:*)",
+      "Bash(curl:*)",
+      "Bash(open https://gestaocentralizadafo.netlify.app)"
     ]
   }
 }

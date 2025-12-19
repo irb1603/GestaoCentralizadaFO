@@ -4,14 +4,17 @@
 import { db } from '../firebase/config.js';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { icons } from '../utils/icons.js';
-import { FO_STATUS, COMPANY_NAMES, formatDate } from '../constants/index.js';
+import { FO_STATUS, COMPANY_NAMES, formatDate, USER_ROLES } from '../constants/index.js';
 import { generateAdtPDF } from '../utils/pdfGenerator.js';
 import { showToast } from '../utils/toast.js';
+import { getSession } from '../firebase/auth.js';
 
 /**
  * Render the Notas Aditamento page
  */
 export async function renderNotasAditamentoPage(container) {
+  const session = getSession();
+
   // Inject styles
   if (!document.getElementById('notas-adt-styles')) {
     const styleEl = document.createElement('style');
@@ -46,7 +49,13 @@ export async function renderNotasAditamentoPage(container) {
     );
 
     const snapshot = await getDocs(q);
-    const allFOs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let allFOs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Apply company filter for commanders and sergeants
+    const isCompanyUser = [USER_ROLES.COMMANDER, USER_ROLES.SERGEANT].includes(session?.role);
+    if (isCompanyUser && session?.company) {
+      allFOs = allFOs.filter(fo => fo.company === session.company);
+    }
 
     // Filter for relevant sanctions and statuses
     // Include all stages from sanction pages through encerrado
