@@ -96,12 +96,17 @@
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--border-light);
     position: relative;
-    min-height: 300px;
-    height: auto;
 }
 
-.chart-container canvas {
-    max-height: 280px !important;
+.chart-wrapper {
+    position: relative;
+    height: 250px;
+    width: 100%;
+}
+
+.chart-wrapper canvas {
+    max-height: 100% !important;
+    max-width: 100% !important;
 }
 
 .chart-header {

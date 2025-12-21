@@ -184,14 +184,18 @@ function renderDashboard() {
         <div class="chart-header">
           <h3 class="chart-title">Distribuição de Sanções</h3>
         </div>
-        <canvas id="sancoesChart"></canvas>
+        <div class="chart-wrapper">
+          <canvas id="sancoesChart"></canvas>
+        </div>
       </div>
       
       <div class="chart-container">
         <div class="chart-header">
           <h3 class="chart-title">Comportamento dos Alunos</h3>
         </div>
-        <canvas id="comportamentoChart"></canvas>
+        <div class="chart-wrapper">
+          <canvas id="comportamentoChart"></canvas>
+        </div>
       </div>
     </div>
     
@@ -201,14 +205,18 @@ function renderDashboard() {
         <div class="chart-header">
           <h3 class="chart-title">FOs por Turma</h3>
         </div>
-        <canvas id="turmasChart"></canvas>
+        <div class="chart-wrapper">
+          <canvas id="turmasChart"></canvas>
+        </div>
       </div>
 
       <div class="chart-container">
         <div class="chart-header">
           <h3 class="chart-title">FOs por Observador (Top 10)</h3>
         </div>
-        <canvas id="observadoresChart"></canvas>
+        <div class="chart-wrapper">
+          <canvas id="observadoresChart"></canvas>
+        </div>
       </div>
     </div>
     
@@ -217,7 +225,9 @@ function renderDashboard() {
       <div class="chart-header">
         <h3 class="chart-title">Evolução Mensal (Lançamentos vs Julgamentos)</h3>
       </div>
-      <canvas id="evolucaoChart"></canvas>
+      <div class="chart-wrapper">
+        <canvas id="evolucaoChart"></canvas>
+      </div>
     </div>
 
     <!-- Top Students Lists -->
