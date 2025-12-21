@@ -204,6 +204,13 @@ export async function renderProcessoDisciplinarPage(container) {
     // Hide loading
     container.querySelector('.page-loading').style.display = 'none';
 
+    // Sort students by turma
+    allStudents.sort((a, b) => {
+      const turmaA = a.turma || '';
+      const turmaB = b.turma || '';
+      return turmaA.localeCompare(turmaB) || a.numero - b.numero;
+    });
+
     // Render students
     renderStudentsList(allStudents);
 

@@ -45,6 +45,7 @@ export async function renderAdminPage() {
     <div class="admin-tabs">
       <button class="admin-tab active" data-tab="sistema">Usuários do Sistema</button>
       <button class="admin-tab" data-tab="registradores">Registradores de FO</button>
+      <button class="admin-tab" data-tab="alunos">Dados dos Alunos</button>
     </div>
     
     <!-- Tab Content: Sistema -->
@@ -196,6 +197,81 @@ export async function renderAdminPage() {
       </div>
     </div>
     
+    <!-- Tab Content: Alunos -->
+    <div class="admin-tab-content" id="tab-alunos">
+      <div class="card">
+        <div class="card__header">
+          <h3 class="card__title">Importar Alunos via CSV</h3>
+        </div>
+        <div class="card__body">
+          <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
+            Faça upload de um arquivo CSV com os dados dos alunos. O arquivo deve ter as colunas: 
+            <strong>numero</strong>, <strong>nome</strong>, <strong>turma</strong> (separados por vírgula ou ponto e vírgula).
+          </p>
+          
+          <div style="background: var(--bg-secondary); padding: var(--space-4); border-radius: var(--radius-lg); margin-bottom: var(--space-4);">
+            <p style="font-size: var(--font-size-sm); margin-bottom: var(--space-2);"><strong>Exemplo de formato CSV:</strong></p>
+            <pre style="background: var(--bg-primary); padding: var(--space-3); border-radius: var(--radius-md); font-size: var(--font-size-sm); overflow-x: auto;">numero;nome;turma
+20044;TRINDADE;201M
+20130;GABRIEL SARMENTO;201M
+20131;PEDRO MARIANO;201M</pre>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Companhia para os alunos importados</label>
+            <select class="form-select" id="csv-company" style="max-width: 300px;">
+              <option value="6cia">6ª Companhia (6º Ano)</option>
+              <option value="7cia">7ª Companhia (7º Ano)</option>
+              <option value="8cia">8ª Companhia (8º Ano)</option>
+              <option value="9cia">9ª Companhia (9º Ano)</option>
+              <option value="1cia">1ª Companhia (1º Ano EM)</option>
+              <option value="2cia">2ª Companhia (2º Ano EM)</option>
+              <option value="3cia">3ª Companhia (3º Ano EM)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Arquivo CSV</label>
+            <input type="file" class="form-input" id="csv-file" accept=".csv,.txt" style="max-width: 400px;">
+          </div>
+          
+          <div id="csv-preview" style="display: none; margin-bottom: var(--space-4);">
+            <h4 style="margin-bottom: var(--space-2);">Pré-visualização (primeiros 10 alunos):</h4>
+            <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+              <table class="table" id="csv-preview-table">
+                <thead>
+                  <tr>
+                    <th>Número</th>
+                    <th>Nome</th>
+                    <th>Turma</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p id="csv-total-count" style="margin-top: var(--space-2); color: var(--text-secondary);"></p>
+          </div>
+          
+          <div id="csv-error" class="alert alert--danger hidden" style="margin-bottom: var(--space-4);">
+            <div class="alert__content">
+              <span id="csv-error-msg"></span>
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: var(--space-3);">
+            <button class="btn btn--primary" id="csv-import-btn" disabled>
+              ${icons.upload} Importar Alunos
+            </button>
+            <button class="btn btn--ghost" id="csv-clear-btn" style="display: none;">
+              Limpar
+            </button>
+          </div>
+          
+          <div id="csv-result" class="hidden" style="margin-top: var(--space-4);"></div>
+        </div>
+      </div>
+    </div>
+    
     <style>
       .admin-tabs {
         display: flex;
@@ -318,6 +394,9 @@ function setupAdminEvents() {
     clearTimeout(debounce);
     debounce = setTimeout(() => renderRegistradores(e.target.value), 300);
   });
+
+  // CSV Import setup
+  setupCSVImport();
 }
 
 async function loadRegistradores() {
@@ -532,4 +611,165 @@ function showToast(message, type = 'info') {
 
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 3000);
+}
+
+// CSV Import functionality
+let parsedCSVData = [];
+
+function setupCSVImport() {
+  const fileInput = document.getElementById('csv-file');
+  const importBtn = document.getElementById('csv-import-btn');
+  const clearBtn = document.getElementById('csv-clear-btn');
+
+  if (!fileInput) return;
+
+  fileInput.addEventListener('change', handleCSVFile);
+  importBtn.addEventListener('click', importCSVToFirestore);
+  clearBtn.addEventListener('click', clearCSVPreview);
+}
+
+function handleCSVFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const text = event.target.result;
+      parsedCSVData = parseCSV(text);
+
+      if (parsedCSVData.length === 0) {
+        showCSVError('Nenhum dado válido encontrado no arquivo.');
+        return;
+      }
+
+      showCSVPreview(parsedCSVData);
+      document.getElementById('csv-import-btn').disabled = false;
+      document.getElementById('csv-clear-btn').style.display = 'inline-flex';
+      document.getElementById('csv-error').classList.add('hidden');
+
+    } catch (error) {
+      showCSVError('Erro ao processar arquivo: ' + error.message);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(line => line.trim());
+  const data = [];
+
+  // Detect separator (comma or semicolon)
+  const firstLine = lines[0];
+  const separator = firstLine.includes(';') ? ';' : ',';
+
+  // Check if first line is header
+  const hasHeader = firstLine.toLowerCase().includes('numero') ||
+    firstLine.toLowerCase().includes('nome') ||
+    firstLine.toLowerCase().includes('turma');
+
+  const startIndex = hasHeader ? 1 : 0;
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const parts = lines[i].split(separator).map(p => p.trim().replace(/^["']|["']$/g, ''));
+
+    if (parts.length >= 2) {
+      const numero = parseInt(parts[0]);
+      const nome = parts[1];
+      const turma = parts[2] || '';
+
+      if (!isNaN(numero) && nome) {
+        data.push({ numero, nome, turma });
+      }
+    }
+  }
+
+  return data;
+}
+
+function showCSVPreview(data) {
+  const preview = document.getElementById('csv-preview');
+  const tbody = document.querySelector('#csv-preview-table tbody');
+  const countEl = document.getElementById('csv-total-count');
+
+  // Show first 10 rows
+  tbody.innerHTML = data.slice(0, 10).map(row => `
+    <tr>
+      <td>${row.numero}</td>
+      <td>${row.nome}</td>
+      <td>${row.turma}</td>
+    </tr>
+  `).join('');
+
+  countEl.textContent = `Total: ${data.length} alunos${data.length > 10 ? ' (mostrando 10)' : ''}`;
+  preview.style.display = 'block';
+}
+
+function showCSVError(message) {
+  const errorDiv = document.getElementById('csv-error');
+  document.getElementById('csv-error-msg').textContent = message;
+  errorDiv.classList.remove('hidden');
+  document.getElementById('csv-import-btn').disabled = true;
+}
+
+function clearCSVPreview() {
+  parsedCSVData = [];
+  document.getElementById('csv-file').value = '';
+  document.getElementById('csv-preview').style.display = 'none';
+  document.getElementById('csv-import-btn').disabled = true;
+  document.getElementById('csv-clear-btn').style.display = 'none';
+  document.getElementById('csv-error').classList.add('hidden');
+  document.getElementById('csv-result').classList.add('hidden');
+}
+
+async function importCSVToFirestore() {
+  if (parsedCSVData.length === 0) return;
+
+  const company = document.getElementById('csv-company').value;
+  const importBtn = document.getElementById('csv-import-btn');
+  const resultDiv = document.getElementById('csv-result');
+
+  importBtn.disabled = true;
+  importBtn.innerHTML = '<span class="spinner"></span> Importando...';
+
+  let success = 0;
+  let errors = 0;
+
+  try {
+    for (const aluno of parsedCSVData) {
+      try {
+        const docId = `${company}_${aluno.numero}`;
+        await setDoc(doc(db, 'students', docId), {
+          numero: aluno.numero,
+          nome: aluno.nome,
+          turma: aluno.turma,
+          company: company,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        success++;
+      } catch (err) {
+        console.error('Error importing:', aluno, err);
+        errors++;
+      }
+    }
+
+    resultDiv.innerHTML = `
+      <div class="alert alert--success">
+        <div class="alert__content">
+          <strong>Importação concluída!</strong><br>
+          ✅ ${success} alunos importados com sucesso${errors > 0 ? `<br>❌ ${errors} erros` : ''}
+        </div>
+      </div>
+    `;
+    resultDiv.classList.remove('hidden');
+
+    showToast(`${success} alunos importados!`, 'success');
+    clearCSVPreview();
+
+  } catch (error) {
+    showCSVError('Erro na importação: ' + error.message);
+  } finally {
+    importBtn.disabled = false;
+    importBtn.innerHTML = `${icons.upload} Importar Alunos`;
+  }
 }
