@@ -9,6 +9,7 @@ import {
   doc,
   setDoc,
   deleteDoc,
+  getDoc,
   query,
   orderBy
 } from 'firebase/firestore';
@@ -220,6 +221,7 @@ export async function renderAdminPage() {
           <div class="form-group">
             <label class="form-label">Companhia para os alunos importados</label>
             <select class="form-select" id="csv-company" style="max-width: 300px;">
+              <option value="">Selecione uma companhia</option>
               <option value="6cia">6ª Companhia (6º Ano)</option>
               <option value="7cia">7ª Companhia (7º Ano)</option>
               <option value="8cia">8ª Companhia (8º Ano)</option>
@@ -229,10 +231,13 @@ export async function renderAdminPage() {
               <option value="3cia">3ª Companhia (3º Ano EM)</option>
             </select>
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">Arquivo CSV</label>
-            <input type="file" class="form-input" id="csv-file" accept=".csv,.txt" style="max-width: 400px;">
+            <input type="file" class="form-input" id="csv-file" accept=".csv,.txt" style="max-width: 400px;" disabled>
+            <p style="font-size: var(--font-size-sm); color: var(--text-tertiary); margin-top: var(--space-2);">
+              Selecione uma companhia primeiro
+            </p>
           </div>
           
           <div id="csv-preview" style="display: none; margin-bottom: var(--space-4);">
@@ -430,6 +435,24 @@ export async function renderAdminPage() {
       .registrador-item__actions {
         display: flex;
         gap: var(--space-2);
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-weight: 600;
+        font-size: 0.7rem;
+      }
+
+      .badge--success {
+        background: #d1fae5;
+        color: #065f46;
+      }
+
+      .badge--warning {
+        background: #fef3c7;
+        color: #92400e;
       }
     </style>
   `;
@@ -713,8 +736,18 @@ function setupCSVImport() {
   const fileInput = document.getElementById('csv-file');
   const importBtn = document.getElementById('csv-import-btn');
   const clearBtn = document.getElementById('csv-clear-btn');
+  const companySelect = document.getElementById('csv-company');
 
   if (!fileInput) return;
+
+  // Habilitar/desabilitar input de arquivo baseado na seleção de companhia
+  companySelect.addEventListener('change', (e) => {
+    fileInput.disabled = !e.target.value;
+    if (!e.target.value) {
+      fileInput.value = '';
+      clearCSVPreview();
+    }
+  });
 
   fileInput.addEventListener('change', handleCSVFile);
   importBtn.addEventListener('click', importCSVToFirestore);
@@ -726,7 +759,7 @@ function handleCSVFile(e) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = (event) => {
+  reader.onload = async (event) => {
     try {
       const text = event.target.result;
       parsedCSVData = parseCSV(text);
@@ -736,7 +769,17 @@ function handleCSVFile(e) {
         return;
       }
 
-      showCSVPreview(parsedCSVData);
+      // Verificar se uma companhia foi selecionada
+      const company = document.getElementById('csv-company').value;
+      if (!company) {
+        showCSVError('Selecione uma companhia antes de carregar o arquivo.');
+        return;
+      }
+
+      // Verificar duplicatas
+      const duplicateInfo = await checkForDuplicates(parsedCSVData, company);
+
+      showCSVPreview(parsedCSVData, duplicateInfo);
       document.getElementById('csv-import-btn').disabled = false;
       document.getElementById('csv-clear-btn').style.display = 'inline-flex';
       document.getElementById('csv-error').classList.add('hidden');
@@ -782,23 +825,96 @@ function parseCSV(text) {
   return data;
 }
 
-function showCSVPreview(data) {
+async function checkForDuplicates(students, company) {
+  const duplicateInfo = {
+    novos: [],
+    atualizacoes: []
+  };
+
+  try {
+    // Buscar documentos existentes no Firestore
+    for (const student of students) {
+      const docId = `${company}_${student.numero}`;
+      const docRef = doc(db, 'students', docId);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        duplicateInfo.atualizacoes.push({
+          ...student,
+          dadosAntigos: docSnap.data()
+        });
+      } else {
+        duplicateInfo.novos.push(student);
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao verificar duplicatas:', error);
+    // Em caso de erro, considerar todos como novos
+    duplicateInfo.novos = students;
+  }
+
+  return duplicateInfo;
+}
+
+function showCSVPreview(data, duplicateInfo = null) {
   const preview = document.getElementById('csv-preview');
   const tbody = document.querySelector('#csv-preview-table tbody');
   const countEl = document.getElementById('csv-total-count');
 
-  // Show first 10 rows
-  tbody.innerHTML = data.slice(0, 10).map(row => `
-    <tr>
-      <td>${row.numero}</td>
-      <td>${row.nome}</td>
-      <td>${row.turma}</td>
-      <td>${row.email || '-'}</td>
-      <td>${row.telefone || '-'}</td>
-    </tr>
-  `).join('');
+  // Criar mapa de duplicatas para lookup rápido
+  const updateMap = new Map();
+  if (duplicateInfo) {
+    duplicateInfo.atualizacoes.forEach(aluno => {
+      updateMap.set(aluno.numero, true);
+    });
+  }
 
-  countEl.textContent = `Total: ${data.length} alunos${data.length > 10 ? ' (mostrando 10)' : ''}`;
+  // Renderizar tabela com indicador de status
+  tbody.innerHTML = data.slice(0, 10).map(row => {
+    const isDuplicate = updateMap.has(row.numero);
+    const statusBadge = isDuplicate
+      ? '<span class="badge badge--warning" style="font-size: 0.7rem; margin-left: 4px;">Atualização</span>'
+      : '<span class="badge badge--success" style="font-size: 0.7rem; margin-left: 4px;">Novo</span>';
+
+    return `
+      <tr>
+        <td>${row.numero} ${statusBadge}</td>
+        <td>${row.nome}</td>
+        <td>${row.turma}</td>
+        <td>${row.email || '-'}</td>
+        <td>${row.telefone || '-'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // Resumo atualizado
+  let resumo = `Total: ${data.length} aluno(s)`;
+  if (duplicateInfo) {
+    resumo += ` | ${duplicateInfo.novos.length} novo(s), ${duplicateInfo.atualizacoes.length} atualização(ões)`;
+  }
+  if (data.length > 10) {
+    resumo += ' (mostrando 10)';
+  }
+
+  countEl.innerHTML = resumo;
+
+  // Remover aviso anterior se existir
+  const oldWarning = preview.querySelector('.duplicate-warning');
+  if (oldWarning) oldWarning.remove();
+
+  // Adicionar aviso se houver atualizações
+  if (duplicateInfo && duplicateInfo.atualizacoes.length > 0) {
+    const warningDiv = document.createElement('div');
+    warningDiv.className = 'alert alert--warning duplicate-warning';
+    warningDiv.style.marginTop = 'var(--space-3)';
+    warningDiv.innerHTML = `
+      <div class="alert__content">
+        <strong>⚠️ Atenção:</strong> ${duplicateInfo.atualizacoes.length} aluno(s) já existe(m) no sistema e será(ão) atualizado(s) com os novos dados.
+      </div>
+    `;
+    preview.appendChild(warningDiv);
+  }
+
   preview.style.display = 'block';
 }
 
