@@ -507,13 +507,12 @@ export function setupAutocomplete() {
           return;
         }
 
-        // Show all items (limited to prevent too long lists)
-        const allItems = items.slice(0, 30);
-        dropdown.innerHTML = allItems.map(item => `
+        // Show all items
+        dropdown.innerHTML = items.map(item => `
           <div class="autocomplete-option" data-id="${item.id}">
             <strong>${item.id}</strong> - ${item.texto}
           </div>
-        `).join('') + (items.length > 30 ? `<div class="autocomplete-more">+ ${items.length - 30} mais... (use a busca)</div>` : '');
+        `).join('');
 
         dropdown.classList.add('active');
 

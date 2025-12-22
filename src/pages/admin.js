@@ -272,6 +272,94 @@ export async function renderAdminPage() {
           <div id="csv-result" class="hidden" style="margin-top: var(--space-4);"></div>
         </div>
       </div>
+
+      <!-- Remover Alunos em Lote -->
+      <div class="card" style="margin-top: var(--space-6);">
+        <div class="card__header">
+          <h3 class="card__title">Remover Alunos em Lote</h3>
+        </div>
+        <div class="card__body">
+          <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
+            Remova alunos do sistema por turma ou selecionando individualmente.
+          </p>
+
+          <!-- Remover por Turma -->
+          <div style="margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--border-light); border-radius: var(--radius-lg);">
+            <h4 style="margin-bottom: var(--space-3); color: var(--text-primary);">Remover por Turma</h4>
+
+            <div class="form-group">
+              <label class="form-label">Companhia</label>
+              <select class="form-select" id="delete-company" style="max-width: 300px;">
+                <option value="">Selecione uma companhia</option>
+                <option value="6cia">6ª Companhia (6º Ano)</option>
+                <option value="7cia">7ª Companhia (7º Ano)</option>
+                <option value="8cia">8ª Companhia (8º Ano)</option>
+                <option value="9cia">9ª Companhia (9º Ano)</option>
+                <option value="1cia">1ª Companhia (1º Ano EM)</option>
+                <option value="2cia">2ª Companhia (2º Ano EM)</option>
+                <option value="3cia">3ª Companhia (3º Ano EM)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Turma</label>
+              <select class="form-select" id="delete-turma" style="max-width: 300px;" disabled>
+                <option value="">Primeiro selecione uma companhia</option>
+              </select>
+            </div>
+
+            <div id="delete-turma-preview" style="display: none; margin: var(--space-4) 0; padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <p style="margin-bottom: var(--space-2);"><strong>Alunos que serão removidos:</strong></p>
+              <p id="delete-turma-count" style="color: var(--text-secondary);"></p>
+            </div>
+
+            <button class="btn btn--danger" id="delete-turma-btn" disabled>
+              ${icons.trash} Remover Turma
+            </button>
+          </div>
+
+          <!-- Remover por Seleção -->
+          <div style="padding: var(--space-4); border: 1px solid var(--border-light); border-radius: var(--radius-lg);">
+            <h4 style="margin-bottom: var(--space-3); color: var(--text-primary);">Remover por Seleção</h4>
+
+            <div class="form-group">
+              <label class="form-label">Buscar alunos</label>
+              <div style="display: flex; gap: var(--space-2); max-width: 500px;">
+                <input type="text" class="form-input" id="search-student" placeholder="Digite o nome ou número do aluno...">
+                <button class="btn btn--secondary" id="search-student-btn">
+                  ${icons.search || '🔍'} Buscar
+                </button>
+              </div>
+            </div>
+
+            <div id="students-list" style="display: none; margin: var(--space-4) 0;">
+              <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th style="width: 50px;">
+                        <input type="checkbox" id="select-all-students">
+                      </th>
+                      <th>Número</th>
+                      <th>Nome</th>
+                      <th>Turma</th>
+                      <th>Companhia</th>
+                    </tr>
+                  </thead>
+                  <tbody id="students-list-body"></tbody>
+                </table>
+              </div>
+
+              <div style="margin-top: var(--space-4); display: flex; align-items: center; justify-content: space-between;">
+                <p id="selected-count" style="color: var(--text-secondary);">Nenhum aluno selecionado</p>
+                <button class="btn btn--danger" id="delete-selected-btn" disabled>
+                  ${icons.trash} Remover Selecionados
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <style>
@@ -399,6 +487,9 @@ function setupAdminEvents() {
 
   // CSV Import setup
   setupCSVImport();
+
+  // Bulk Delete setup
+  setupBulkDelete();
 }
 
 async function loadRegistradores() {
@@ -781,4 +872,248 @@ async function importCSVToFirestore() {
     importBtn.innerHTML = `${icons.upload} Importar Alunos`;
   }
 }
+
+// Bulk Delete functionality
+let allStudentsCache = [];
+let turmasCache = {};
+
+function setupBulkDelete() {
+  const deleteCompanySelect = document.getElementById('delete-company');
+  const deleteTurmaSelect = document.getElementById('delete-turma');
+  const deleteTurmaBtn = document.getElementById('delete-turma-btn');
+  const searchStudentBtn = document.getElementById('search-student-btn');
+  const searchStudentInput = document.getElementById('search-student');
+  const selectAllCheckbox = document.getElementById('select-all-students');
+  const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+
+  if (!deleteCompanySelect) return;
+
+  // Load all students
+  loadAllStudents();
+
+  // Delete by Turma: Company change
+  deleteCompanySelect.addEventListener('change', async (e) => {
+    const company = e.target.value;
+    deleteTurmaSelect.disabled = true;
+    deleteTurmaSelect.innerHTML = '<option value="">Carregando...</option>';
+    deleteTurmaBtn.disabled = true;
+    document.getElementById('delete-turma-preview').style.display = 'none';
+
+    if (!company) {
+      deleteTurmaSelect.innerHTML = '<option value="">Primeiro selecione uma companhia</option>';
+      return;
+    }
+
+    // Get turmas for this company
+    const turmas = await getTurmasByCompany(company);
+    deleteTurmaSelect.innerHTML = '<option value="">Selecione uma turma</option>' +
+      turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+    deleteTurmaSelect.disabled = false;
+  });
+
+  // Delete by Turma: Turma change
+  deleteTurmaSelect.addEventListener('change', async (e) => {
+    const company = deleteCompanySelect.value;
+    const turma = e.target.value;
+
+    if (!turma) {
+      document.getElementById('delete-turma-preview').style.display = 'none';
+      deleteTurmaBtn.disabled = true;
+      return;
+    }
+
+    // Show preview
+    const students = allStudentsCache.filter(s => s.company === company && s.turma === turma);
+    document.getElementById('delete-turma-count').textContent = `${students.length} aluno(s) - ${students.map(s => s.nome).join(', ')}`;
+    document.getElementById('delete-turma-preview').style.display = 'block';
+    deleteTurmaBtn.disabled = false;
+  });
+
+  // Delete by Turma: Delete button
+  deleteTurmaBtn.addEventListener('click', async () => {
+    const company = deleteCompanySelect.value;
+    const turma = deleteTurmaSelect.value;
+
+    if (!confirm(`Tem certeza que deseja remover todos os alunos da turma ${turma}? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    deleteTurmaBtn.disabled = true;
+    deleteTurmaBtn.innerHTML = '<span class="spinner"></span> Removendo...';
+
+    try {
+      const students = allStudentsCache.filter(s => s.company === company && s.turma === turma);
+      let success = 0;
+
+      for (const student of students) {
+        try {
+          await deleteDoc(doc(db, 'students', student.id));
+          success++;
+        } catch (err) {
+          console.error('Error deleting student:', student, err);
+        }
+      }
+
+      showToast(`${success} aluno(s) removido(s) com sucesso!`, 'success');
+
+      // Reset
+      deleteCompanySelect.value = '';
+      deleteTurmaSelect.innerHTML = '<option value="">Primeiro selecione uma companhia</option>';
+      deleteTurmaSelect.disabled = true;
+      document.getElementById('delete-turma-preview').style.display = 'none';
+      deleteTurmaBtn.disabled = true;
+
+      // Reload students
+      await loadAllStudents();
+
+    } catch (error) {
+      showToast('Erro ao remover alunos: ' + error.message, 'error');
+    } finally {
+      deleteTurmaBtn.disabled = false;
+      deleteTurmaBtn.innerHTML = `${icons.trash} Remover Turma`;
+    }
+  });
+
+  // Search students
+  const performSearch = async () => {
+    const searchTerm = searchStudentInput.value.trim().toLowerCase();
+    if (!searchTerm) {
+      showToast('Digite algo para buscar', 'warning');
+      return;
+    }
+
+    const results = allStudentsCache.filter(s =>
+      s.nome.toLowerCase().includes(searchTerm) ||
+      s.numero.toString().includes(searchTerm)
+    );
+
+    renderStudentsList(results);
+  };
+
+  searchStudentBtn.addEventListener('click', performSearch);
+  searchStudentInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') performSearch();
+  });
+
+  // Select all checkbox
+  selectAllCheckbox.addEventListener('change', (e) => {
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(cb => cb.checked = e.target.checked);
+    updateSelectedCount();
+  });
+
+  // Delete selected button
+  deleteSelectedBtn.addEventListener('click', async () => {
+    const selectedIds = Array.from(document.querySelectorAll('.student-checkbox:checked'))
+      .map(cb => cb.dataset.studentId);
+
+    if (selectedIds.length === 0) {
+      showToast('Nenhum aluno selecionado', 'warning');
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja remover ${selectedIds.length} aluno(s)? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    deleteSelectedBtn.disabled = true;
+    deleteSelectedBtn.innerHTML = '<span class="spinner"></span> Removendo...';
+
+    try {
+      let success = 0;
+
+      for (const id of selectedIds) {
+        try {
+          await deleteDoc(doc(db, 'students', id));
+          success++;
+        } catch (err) {
+          console.error('Error deleting student:', id, err);
+        }
+      }
+
+      showToast(`${success} aluno(s) removido(s) com sucesso!`, 'success');
+
+      // Reload students
+      await loadAllStudents();
+
+      // Clear list
+      document.getElementById('students-list').style.display = 'none';
+      searchStudentInput.value = '';
+
+    } catch (error) {
+      showToast('Erro ao remover alunos: ' + error.message, 'error');
+    } finally {
+      deleteSelectedBtn.disabled = false;
+      deleteSelectedBtn.innerHTML = `${icons.trash} Remover Selecionados`;
+    }
+  });
+}
+
+async function loadAllStudents() {
+  try {
+    const snapshot = await getDocs(collection(db, 'students'));
+    allStudentsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Build turmas cache
+    turmasCache = {};
+    allStudentsCache.forEach(s => {
+      if (s.company && s.turma) {
+        if (!turmasCache[s.company]) {
+          turmasCache[s.company] = new Set();
+        }
+        turmasCache[s.company].add(s.turma);
+      }
+    });
+
+    // Convert sets to sorted arrays
+    Object.keys(turmasCache).forEach(company => {
+      turmasCache[company] = Array.from(turmasCache[company]).sort();
+    });
+  } catch (error) {
+    console.error('Error loading students:', error);
+  }
+}
+
+async function getTurmasByCompany(company) {
+  return turmasCache[company] || [];
+}
+
+function renderStudentsList(students) {
+  const listContainer = document.getElementById('students-list');
+  const tbody = document.getElementById('students-list-body');
+
+  if (students.length === 0) {
+    showToast('Nenhum aluno encontrado', 'info');
+    listContainer.style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = students.map(s => `
+    <tr>
+      <td>
+        <input type="checkbox" class="student-checkbox" data-student-id="${s.id}" onchange="updateSelectedCount()">
+      </td>
+      <td>${s.numero}</td>
+      <td>${s.nome}</td>
+      <td>${s.turma || '-'}</td>
+      <td>${s.company || '-'}</td>
+    </tr>
+  `).join('');
+
+  listContainer.style.display = 'block';
+  document.getElementById('select-all-students').checked = false;
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const count = document.querySelectorAll('.student-checkbox:checked').length;
+  const countEl = document.getElementById('selected-count');
+  const deleteBtn = document.getElementById('delete-selected-btn');
+
+  countEl.textContent = count === 0 ? 'Nenhum aluno selecionado' : `${count} aluno(s) selecionado(s)`;
+  deleteBtn.disabled = count === 0;
+}
+
+// Make updateSelectedCount globally accessible
+window.updateSelectedCount = updateSelectedCount;
 
