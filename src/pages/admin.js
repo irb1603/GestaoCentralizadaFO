@@ -206,15 +206,15 @@ export async function renderAdminPage() {
         <div class="card__body">
           <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
             Faça upload de um arquivo CSV com os dados dos alunos. O arquivo deve ter as colunas: 
-            <strong>numero</strong>, <strong>nome</strong>, <strong>turma</strong> (separados por vírgula ou ponto e vírgula).
+            <strong>numero</strong>, <strong>nome</strong>, <strong>turma</strong>, <strong>email</strong>, <strong>telefone</strong> (separados por vírgula ou ponto e vírgula).
           </p>
           
           <div style="background: var(--bg-secondary); padding: var(--space-4); border-radius: var(--radius-lg); margin-bottom: var(--space-4);">
             <p style="font-size: var(--font-size-sm); margin-bottom: var(--space-2);"><strong>Exemplo de formato CSV:</strong></p>
-            <pre style="background: var(--bg-primary); padding: var(--space-3); border-radius: var(--radius-md); font-size: var(--font-size-sm); overflow-x: auto;">numero;nome;turma
-20044;TRINDADE;201M
-20130;GABRIEL SARMENTO;201M
-20131;PEDRO MARIANO;201M</pre>
+            <pre style="background: var(--bg-primary); padding: var(--space-3); border-radius: var(--radius-md); font-size: var(--font-size-sm); overflow-x: auto;">numero;nome;turma;email;telefone
+20044;TRINDADE;201M;responsavel@email.com;61999998888
+20130;GABRIEL SARMENTO;201M;pai@email.com;61988887777
+20131;PEDRO MARIANO;201M;mae@email.com;61977776666</pre>
           </div>
           
           <div class="form-group">
@@ -244,6 +244,8 @@ export async function renderAdminPage() {
                     <th>Número</th>
                     <th>Nome</th>
                     <th>Turma</th>
+                    <th>Email</th>
+                    <th>Telefone</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -677,9 +679,11 @@ function parseCSV(text) {
       const numero = parseInt(parts[0]);
       const nome = parts[1];
       const turma = parts[2] || '';
+      const email = parts[3] || '';
+      const telefone = parts[4] || '';
 
       if (!isNaN(numero) && nome) {
-        data.push({ numero, nome, turma });
+        data.push({ numero, nome, turma, email, telefone });
       }
     }
   }
@@ -698,6 +702,8 @@ function showCSVPreview(data) {
       <td>${row.numero}</td>
       <td>${row.nome}</td>
       <td>${row.turma}</td>
+      <td>${row.email || '-'}</td>
+      <td>${row.telefone || '-'}</td>
     </tr>
   `).join('');
 
@@ -743,6 +749,8 @@ async function importCSVToFirestore() {
           numero: aluno.numero,
           nome: aluno.nome,
           turma: aluno.turma,
+          emailResponsavel: aluno.email,
+          telResponsavel: aluno.telefone,
           company: company,
           updatedAt: new Date().toISOString()
         }, { merge: true });
@@ -773,3 +781,4 @@ async function importCSVToFirestore() {
     importBtn.innerHTML = `${icons.upload} Importar Alunos`;
   }
 }
+

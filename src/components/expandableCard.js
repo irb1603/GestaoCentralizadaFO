@@ -58,9 +58,11 @@ function renderDatasCumprimento(datas, qtdDias = 1, enabled = true) {
  * @param {Object} fo - Fato Observado data
  * @param {Object} studentData - Student data (nome, turma, etc.)
  * @param {boolean} isExpanded - Initial expanded state
+ * @param {Object} options - Additional options { readOnly: boolean, showDelete: boolean, showReturn: boolean, onReturnStatus: string }
  * @returns {string} HTML string
  */
-export function renderExpandableCard(fo, studentData = {}, isExpanded = false) {
+export function renderExpandableCard(fo, studentData = {}, isExpanded = false, options = {}) {
+  const { readOnly = false, showDelete = false, showReturn = false, onReturnStatus = '' } = options;
   const cardId = `fo-card-${fo.id}`;
   const tipoColor = TIPO_FATO_COLORS[fo.tipo] || 'neutral';
   const tipoLabel = TIPO_FATO_LABELS[fo.tipo] || fo.tipo;
@@ -80,6 +82,9 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false) {
 
   // Calculate termo prazo (3 business days from lançamento date)
   const termoPrazo = fo.dataLancamentoSINCOMIL ? add3BusinessDays(fo.dataLancamentoSINCOMIL) : '';
+
+  // Determine if inputs should be disabled
+  const inputDisabled = readOnly ? 'disabled' : '';
 
   return `
     <div class="expandable-card ${isExpanded ? 'expanded' : ''}" id="${cardId}" data-fo-id="${fo.id}">
@@ -195,9 +200,15 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false) {
         <div class="expandable-card__section">
           <h4 class="expandable-card__section-title">Enquadramento (Faltas Disciplinares)</h4>
           <div class="autocomplete-container" data-type="enquadramento" data-card-id="${cardId}">
-            <input type="text" class="form-input autocomplete-input" 
-                   placeholder="Digite para buscar faltas disciplinares..." 
-                   data-field-search="enquadramento">
+            <div class="autocomplete-input-wrapper">
+              <input type="text" class="form-input autocomplete-input" 
+                     placeholder="Digite para buscar faltas disciplinares..." 
+                     data-field-search="enquadramento" ${inputDisabled}>
+              <button type="button" class="btn btn--icon btn--ghost autocomplete-toggle" 
+                      data-toggle="enquadramento" title="Mostrar todas as opções">
+                ${icons.chevronDown}
+              </button>
+            </div>
             <div class="autocomplete-dropdown"></div>
             <div class="autocomplete-selected" data-field="enquadramento" data-value="${fo.enquadramento || ''}">
               ${renderSelectedItems(fo.enquadramento, FALTAS_DISCIPLINARES)}
@@ -234,9 +245,15 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false) {
           <div class="expandable-card__field" style="margin-top: var(--space-4);">
             <label>Atenuantes</label>
             <div class="autocomplete-container" data-type="atenuantes" data-card-id="${cardId}">
-              <input type="text" class="form-input autocomplete-input" 
-                     placeholder="Digite para buscar atenuantes..." 
-                     data-field-search="atenuantes">
+              <div class="autocomplete-input-wrapper">
+                <input type="text" class="form-input autocomplete-input" 
+                       placeholder="Digite para buscar atenuantes..." 
+                       data-field-search="atenuantes" ${inputDisabled}>
+                <button type="button" class="btn btn--icon btn--ghost autocomplete-toggle" 
+                        data-toggle="atenuantes" title="Mostrar todas as opções">
+                  ${icons.chevronDown}
+                </button>
+              </div>
               <div class="autocomplete-dropdown"></div>
               <div class="autocomplete-selected" data-field="atenuante" data-value="${fo.atenuante || ''}">
                 ${renderSelectedItems(fo.atenuante, ATENUANTES)}
@@ -248,9 +265,15 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false) {
           <div class="expandable-card__field" style="margin-top: var(--space-4);">
             <label>Agravantes</label>
             <div class="autocomplete-container" data-type="agravantes" data-card-id="${cardId}">
-              <input type="text" class="form-input autocomplete-input" 
-                     placeholder="Digite para buscar agravantes..." 
-                     data-field-search="agravantes">
+              <div class="autocomplete-input-wrapper">
+                <input type="text" class="form-input autocomplete-input" 
+                       placeholder="Digite para buscar agravantes..." 
+                       data-field-search="agravantes" ${inputDisabled}>
+                <button type="button" class="btn btn--icon btn--ghost autocomplete-toggle" 
+                        data-toggle="agravantes" title="Mostrar todas as opções">
+                  ${icons.chevronDown}
+                </button>
+              </div>
               <div class="autocomplete-dropdown"></div>
               <div class="autocomplete-selected" data-field="agravante" data-value="${fo.agravante || ''}">
                 ${renderSelectedItems(fo.agravante, AGRAVANTES)}
@@ -294,15 +317,28 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false) {
         
         <!-- Ações -->
         <div class="expandable-card__actions">
-          <button class="btn btn--danger btn--sm" data-action="delete" title="Mover para GLPI">
-            ${icons.trash} Excluir
-          </button>
-          <button class="btn btn--secondary btn--sm" data-action="cancel">Cancelar</button>
-          <button class="btn btn--primary btn--sm" data-action="save">Salvar Alterações</button>
+          ${showReturn && onReturnStatus ? `
+            <button class="btn btn--secondary btn--sm" data-action="return" data-status="${onReturnStatus}" title="Retornar à etapa anterior">
+              ${icons.chevronLeft || '←'} Retornar
+            </button>
+          ` : ''}
           
-          <div class="expandable-card__transfer">
-            <button class="btn btn--warning btn--sm" data-action="concluir">Concluir</button>
-          </div>
+          ${showDelete ? `
+            <button class="btn btn--danger btn--sm" data-action="delete" title="Excluir FO">
+              ${icons.trash} Excluir
+            </button>
+          ` : ''}
+          
+          ${!readOnly ? `
+            <button class="btn btn--secondary btn--sm" data-action="cancel">Cancelar</button>
+            <button class="btn btn--primary btn--sm" data-action="save">Salvar Alterações</button>
+          ` : ''}
+          
+          ${!readOnly ? `
+            <div class="expandable-card__transfer">
+              <button class="btn btn--warning btn--sm" data-action="concluir">Concluir</button>
+            </div>
+          ` : ''}
         </div>
       </div>
     </div>
@@ -458,6 +494,62 @@ export function setupAutocomplete() {
         dropdown.classList.remove('active');
       }
     });
+
+    // Toggle button to show all options
+    const toggleBtn = container.querySelector('.autocomplete-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (dropdown.classList.contains('active')) {
+          dropdown.classList.remove('active');
+          return;
+        }
+
+        // Show all items (limited to prevent too long lists)
+        const allItems = items.slice(0, 30);
+        dropdown.innerHTML = allItems.map(item => `
+          <div class="autocomplete-option" data-id="${item.id}">
+            <strong>${item.id}</strong> - ${item.texto}
+          </div>
+        `).join('') + (items.length > 30 ? `<div class="autocomplete-more">+ ${items.length - 30} mais... (use a busca)</div>` : '');
+
+        dropdown.classList.add('active');
+
+        // Setup click handlers for options
+        dropdown.querySelectorAll('.autocomplete-option').forEach(option => {
+          option.addEventListener('click', () => {
+            const id = parseInt(option.dataset.id);
+            const selectedContainer = container.querySelector('.autocomplete-selected');
+            const currentValue = selectedContainer.dataset.value || '';
+            const currentIds = currentValue.split(',').map(i => parseInt(i.trim())).filter(i => !isNaN(i));
+
+            if (!currentIds.includes(id)) {
+              currentIds.push(id);
+              selectedContainer.dataset.value = currentIds.join(',');
+
+              const item = items.find(i => i.id === id);
+              const tag = document.createElement('span');
+              tag.className = 'autocomplete-tag';
+              tag.dataset.id = id;
+              tag.innerHTML = `
+                ${id} - ${item.texto.substring(0, 30)}${item.texto.length > 30 ? '...' : ''}
+                <button type="button" class="autocomplete-tag__remove" onclick="removeAutocompleteItem(this, ${id})">×</button>
+              `;
+
+              // Remove placeholder if exists
+              const placeholder = selectedContainer.querySelector('.autocomplete-placeholder');
+              if (placeholder) placeholder.remove();
+
+              selectedContainer.appendChild(tag);
+            }
+
+            dropdown.classList.remove('active');
+          });
+        });
+      });
+    }
   });
 }
 
@@ -721,6 +813,43 @@ export const expandableCardStyles = `
 /* Autocomplete Styles */
 .autocomplete-container {
   position: relative;
+}
+
+.autocomplete-input-wrapper {
+  display: flex;
+  gap: 0;
+}
+
+.autocomplete-input-wrapper .autocomplete-input {
+  flex: 1;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.autocomplete-toggle {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-left: none;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+}
+
+.autocomplete-toggle:hover {
+  background: var(--bg-secondary);
+}
+
+.autocomplete-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.autocomplete-more {
+  padding: var(--space-3);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  font-style: italic;
+  background: var(--bg-secondary);
 }
 
 .autocomplete-dropdown {

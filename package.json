@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
+    "docx": "^9.5.1",
+    "file-saver": "^2.0.5",
     "firebase": "^10.7.1",
     "pdfjs-dist": "^5.4.449",
     "tesseract.js": "^7.0.0"

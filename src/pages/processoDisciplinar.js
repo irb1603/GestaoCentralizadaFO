@@ -257,51 +257,89 @@ export async function renderProcessoDisciplinarPage(container) {
     }
 
     emptyState.style.display = 'none';
-    listContainer.style.display = 'grid';
+    listContainer.style.display = 'block';
 
-    listContainer.innerHTML = students.map(student => {
-      const fos = studentFOs[student.numero] || [];
-      const termos = studentTermos[student.numero] || [];
+    // Group students by turma
+    const byTurma = {};
+    students.forEach(student => {
+      const turma = student.turma || 'Sem Turma';
+      if (!byTurma[turma]) {
+        byTurma[turma] = [];
+      }
+      byTurma[turma].push(student);
+    });
+
+    // Sort turmas
+    const sortedTurmas = Object.keys(byTurma).sort();
+
+    listContainer.innerHTML = sortedTurmas.map(turma => {
+      const turmaStudents = byTurma[turma];
+      const totalFOs = turmaStudents.reduce((acc, s) => acc + (studentFOs[s.numero]?.length || 0), 0);
+      const totalTermos = turmaStudents.reduce((acc, s) => acc + (studentTermos[s.numero]?.length || 0), 0);
 
       return `
-        <div class="student-card" data-numero="${student.numero}">
-          <div class="student-card__header">
-            <div class="student-card__number">${student.numero}</div>
-            <div class="student-card__info">
-              <div class="student-card__name">${student.nome || '-'}</div>
-              <div class="student-card__turma">Turma ${student.turma || '-'}</div>
+        <div class="turma-section" data-turma="${turma}">
+          <div class="turma-header" onclick="toggleTurmaSection('${turma}')">
+            <div class="turma-header__info">
+              <span class="turma-header__chevron">${icons.chevronRight}</span>
+              <h3 class="turma-header__title">Turma ${turma}</h3>
+              <span class="badge badge--primary">${turmaStudents.length} aluno${turmaStudents.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="turma-header__stats">
+              <span class="turma-stat">${totalFOs} FOs</span>
+              <span class="turma-stat">${totalTermos} Termos</span>
             </div>
           </div>
-          
-          <div class="student-card__stats">
-            <div class="stat">
-              <span class="stat-value">${fos.length}</span>
-              <span class="stat-label">FOs</span>
+          <div class="turma-content" style="display: none;">
+            <div class="students-grid">
+              ${turmaStudents.map(student => {
+        const fos = studentFOs[student.numero] || [];
+        const termos = studentTermos[student.numero] || [];
+
+        return `
+                  <div class="student-card" data-numero="${student.numero}">
+                    <div class="student-card__header">
+                      <div class="student-card__number">${student.numero}</div>
+                      <div class="student-card__info">
+                        <div class="student-card__name">${student.nome || '-'}</div>
+                        <div class="student-card__turma">Turma ${student.turma || '-'}</div>
+                      </div>
+                    </div>
+                    
+                    <div class="student-card__stats">
+                      <div class="stat">
+                        <span class="stat-value">${fos.length}</span>
+                        <span class="stat-label">FOs</span>
+                      </div>
+                      <div class="stat">
+                        <span class="stat-value">${termos.length}</span>
+                        <span class="stat-label">Termos</span>
+                      </div>
+                    </div>
+                    
+                    ${termos.length > 0 ? `
+                      <div class="student-card__termos">
+                        ${termos.slice(0, 3).map(t => `
+                          <a href="${t.fileUrl}" target="_blank" class="termo-link" title="${formatDate(t.uploadedAt)}">
+                            ${icons.document}
+                          </a>
+                        `).join('')}
+                        ${termos.length > 3 ? `<span class="termo-more">+${termos.length - 3}</span>` : ''}
+                      </div>
+                    ` : ''}
+                    
+                    <div class="student-card__actions">
+                      <button class="btn btn--secondary btn--sm btn-upload" data-numero="${student.numero}" data-nome="${student.nome}">
+                        ${icons.upload} Upload Termo
+                      </button>
+                      <button class="btn btn--ghost btn--sm btn-view-fos" data-numero="${student.numero}">
+                        ${icons.eye} Ver FOs
+                      </button>
+                    </div>
+                  </div>
+                `;
+      }).join('')}
             </div>
-            <div class="stat">
-              <span class="stat-value">${termos.length}</span>
-              <span class="stat-label">Termos</span>
-            </div>
-          </div>
-          
-          ${termos.length > 0 ? `
-            <div class="student-card__termos">
-              ${termos.slice(0, 3).map(t => `
-                <a href="${t.fileUrl}" target="_blank" class="termo-link" title="${formatDate(t.uploadedAt)}">
-                  ${icons.document}
-                </a>
-              `).join('')}
-              ${termos.length > 3 ? `<span class="termo-more">+${termos.length - 3}</span>` : ''}
-            </div>
-          ` : ''}
-          
-          <div class="student-card__actions">
-            <button class="btn btn--secondary btn--sm btn-upload" data-numero="${student.numero}" data-nome="${student.nome}">
-              ${icons.upload} Upload Termo
-            </button>
-            <button class="btn btn--ghost btn--sm btn-view-fos" data-numero="${student.numero}">
-              ${icons.eye} Ver FOs
-            </button>
           </div>
         </div>
       `;
@@ -719,6 +757,23 @@ async function generateProcessoPDF(student, fos, termos, session) {
   printWindow.document.close();
 }
 
+// Global function to toggle turma sections
+window.toggleTurmaSection = function (turma) {
+  const section = document.querySelector(`.turma-section[data-turma="${turma}"]`);
+  if (!section) return;
+
+  const content = section.querySelector('.turma-content');
+  const chevron = section.querySelector('.turma-header__chevron');
+
+  if (content.style.display === 'none') {
+    content.style.display = 'block';
+    if (chevron) chevron.style.transform = 'rotate(90deg)';
+  } else {
+    content.style.display = 'none';
+    if (chevron) chevron.style.transform = '';
+  }
+};
+
 // Styles
 const processoStyles = `
 .page-header__top {
@@ -731,6 +786,65 @@ const processoStyles = `
 
 .search-bar {
   margin-bottom: var(--space-4);
+}
+
+/* Turma Section Styles */
+.turma-section {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+}
+
+.turma-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.turma-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.turma-header__info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.turma-header__chevron {
+  transition: transform 0.2s;
+  color: var(--text-tertiary);
+}
+
+.turma-header__chevron svg {
+  width: 20px;
+  height: 20px;
+}
+
+.turma-header__title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.turma-header__stats {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.turma-stat {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.turma-content {
+  padding: var(--space-4);
 }
 
 .students-grid {

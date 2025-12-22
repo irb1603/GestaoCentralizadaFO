@@ -5,7 +5,7 @@ import { db } from '../firebase/config.js';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { icons } from '../utils/icons.js';
 import { FO_STATUS, COMPANY_NAMES, formatDate, USER_ROLES } from '../constants/index.js';
-import { generateAdtPDF } from '../utils/pdfGenerator.js';
+import { generateAdtDOCX } from '../utils/docxGenerator.js';
 import { showToast } from '../utils/toast.js';
 import { getSession } from '../firebase/auth.js';
 
@@ -120,15 +120,15 @@ export async function renderNotasAditamentoPage(container) {
             ${retiradaCount > 0 ? `<div class="stat"><span class="stat-value">${retiradaCount}</span> Retirada</div>` : ''}
           </div>
           
-          <button class="btn btn--primary btn--block generate-pdf-btn" data-date="${date}">
-            ${icons.download} Gerar PDF
+          <button class="btn btn--primary btn--block generate-docx-btn" data-date="${date}">
+            ${icons.download} Baixar DOCX
           </button>
         </div>
       `;
     }).join('');
 
     // Setup click handlers
-    container.querySelectorAll('.generate-pdf-btn').forEach(btn => {
+    container.querySelectorAll('.generate-docx-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const date = btn.dataset.date;
         const fos = fosByDate[date];
@@ -137,14 +137,14 @@ export async function renderNotasAditamentoPage(container) {
         btn.innerHTML = '<span class="spinner"></span> Gerando...';
 
         try {
-          await generateAdtPDF(fos, date);
-          showToast('PDF gerado com sucesso!', 'success');
+          await generateAdtDOCX(fos, date);
+          showToast('Documento gerado com sucesso!', 'success');
         } catch (error) {
-          console.error('Erro ao gerar PDF:', error);
-          showToast('Erro ao gerar PDF', 'error');
+          console.error('Erro ao gerar documento:', error);
+          showToast('Erro ao gerar documento', 'error');
         } finally {
           btn.disabled = false;
-          btn.innerHTML = `${icons.download} Gerar PDF`;
+          btn.innerHTML = `${icons.download} Baixar DOCX`;
         }
       });
     });

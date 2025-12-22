@@ -2,25 +2,28 @@
 // Gestão Centralizada FO - CMB
 
 import { db } from '../firebase/config.js';
-import { collection, query, where, getDocs, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { renderExpandableCard, setupAutocomplete, expandableCardStyles } from '../components/expandableCard.js';
 import { icons } from '../utils/icons.js';
 import { FO_STATUS, formatDate } from '../constants/index.js';
 import { showToast } from '../utils/toast.js';
+import { isAdmin } from '../firebase/auth.js';
 
 /**
  * Render the Concluir page
  */
 export async function renderConcluirPage(container) {
-    // Inject styles
-    if (!document.getElementById('concluir-styles')) {
-        const styleEl = document.createElement('style');
-        styleEl.id = 'concluir-styles';
-        styleEl.textContent = expandableCardStyles + concluirStyles;
-        document.head.appendChild(styleEl);
-    }
+  const userIsAdmin = isAdmin();
 
-    container.innerHTML = `
+  // Inject styles
+  if (!document.getElementById('concluir-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'concluir-styles';
+    styleEl.textContent = expandableCardStyles + concluirStyles;
+    document.head.appendChild(styleEl);
+  }
+
+  container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">Concluir</h1>
       <p class="page-subtitle">FOs com medidas disciplinares consolidadas aguardando conclusão</p>
@@ -36,57 +39,64 @@ export async function renderConcluirPage(container) {
     </div>
   `;
 
-    try {
-        // Query FOs with status concluir
-        const q = query(
-            collection(db, 'fatosObservados'),
-            where('status', '==', FO_STATUS.CONCLUIR),
-            orderBy('dataFato', 'desc')
-        );
+  try {
+    // Query FOs with status concluir
+    const q = query(
+      collection(db, 'fatosObservados'),
+      where('status', '==', FO_STATUS.CONCLUIR),
+      orderBy('dataFato', 'desc')
+    );
 
-        const snapshot = await getDocs(q);
-        let fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const snapshot = await getDocs(q);
+    let fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Fetch student data
-        const studentNumbers = [...new Set(fos.flatMap(fo => fo.studentNumbers || []))];
-        const studentDataCache = {};
+    // Fetch student data
+    const studentNumbers = [...new Set(fos.flatMap(fo => fo.studentNumbers || []))];
+    const studentDataCache = {};
 
-        if (studentNumbers.length > 0) {
-            const studentsQuery = query(
-                collection(db, 'students'),
-                where('numero', 'in', studentNumbers.slice(0, 30))
-            );
-            const studentsSnapshot = await getDocs(studentsQuery);
-            studentsSnapshot.docs.forEach(doc => {
-                const data = doc.data();
-                studentDataCache[data.numero] = data;
-            });
-        }
+    if (studentNumbers.length > 0) {
+      const studentsQuery = query(
+        collection(db, 'students'),
+        where('numero', 'in', studentNumbers.slice(0, 30))
+      );
+      const studentsSnapshot = await getDocs(studentsQuery);
+      studentsSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        studentDataCache[data.numero] = data;
+      });
+    }
 
-        // Hide loading
-        container.querySelector('.page-loading').style.display = 'none';
+    // Hide loading
+    container.querySelector('.page-loading').style.display = 'none';
 
-        // Render FOs
-        renderFOList();
+    // Render FOs
+    renderFOList();
 
-        function renderFOList() {
-            const listContainer = container.querySelector('#fo-list');
-            const emptyState = container.querySelector('#empty-state');
+    function renderFOList() {
+      const listContainer = container.querySelector('#fo-list');
+      const emptyState = container.querySelector('#empty-state');
 
-            if (fos.length === 0) {
-                listContainer.style.display = 'none';
-                emptyState.style.display = 'block';
-                return;
-            }
+      if (fos.length === 0) {
+        listContainer.style.display = 'none';
+        emptyState.style.display = 'block';
+        return;
+      }
 
-            emptyState.style.display = 'none';
-            listContainer.style.display = 'block';
+      emptyState.style.display = 'none';
+      listContainer.style.display = 'block';
 
-            listContainer.innerHTML = fos.map(fo => {
-                const studentData = studentDataCache[fo.studentNumbers?.[0]] || {};
-                const cardHtml = renderExpandableCard(fo, studentData, false);
+      listContainer.innerHTML = fos.map(fo => {
+        const studentData = studentDataCache[fo.studentNumbers?.[0]] || {};
+        // Pass options: readOnly for non-admin, showDelete only for admin, showReturn with previous status
+        const cardOptions = {
+          readOnly: !userIsAdmin,
+          showDelete: userIsAdmin,
+          showReturn: true,
+          onReturnStatus: FO_STATUS.CONSOLIDAR
+        };
+        const cardHtml = renderExpandableCard(fo, studentData, false, cardOptions);
 
-                return `
+        return `
           <div class="concluir-card-wrapper" data-fo-id="${fo.id}">
             ${cardHtml}
             <div class="concluir-action-bar">
@@ -100,52 +110,109 @@ export async function renderConcluirPage(container) {
             </div>
           </div>
         `;
-            }).join('');
+      }).join('');
 
-            // Setup autocomplete
-            setupAutocomplete();
+      // Setup autocomplete
+      setupAutocomplete();
 
-            // Setup concluir buttons
-            container.querySelectorAll('[data-action="concluir"]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const foId = btn.dataset.foId;
+      // Setup concluir buttons
+      container.querySelectorAll('[data-action="concluir"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const foId = btn.dataset.foId;
 
-                    const confirmMessage = `Deseja marcar este FO como concluído?\n\nO FO será movido para Encerrados.`;
-                    if (!confirm(confirmMessage)) return;
+          const confirmMessage = `Deseja marcar este FO como concluído?\n\nO FO será movido para Encerrados.`;
+          if (!confirm(confirmMessage)) return;
 
-                    try {
-                        btn.disabled = true;
-                        btn.innerHTML = '<span class="spinner"></span> Movendo...';
+          try {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Movendo...';
 
-                        // Update FO status
-                        await updateDoc(doc(db, 'fatosObservados', foId), {
-                            status: FO_STATUS.ENCERRADO,
-                            concluidoEm: new Date().toISOString(),
-                            updatedAt: new Date().toISOString()
-                        });
-
-                        showToast('FO concluído e movido para Encerrados', 'success');
-
-                        // Remove from list and re-render
-                        fos = fos.filter(f => f.id !== foId);
-                        renderFOList();
-
-                    } catch (error) {
-                        console.error('Erro ao concluir FO:', error);
-                        alert('Erro ao concluir FO: ' + error.message);
-                        btn.disabled = false;
-                        btn.innerHTML = `${icons.check} Concluído`;
-                    }
-                });
+            // Update FO status
+            await updateDoc(doc(db, 'fatosObservados', foId), {
+              status: FO_STATUS.ENCERRADO,
+              concluidoEm: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
             });
-        }
 
-    } catch (error) {
-        console.error('Erro ao carregar FOs:', error);
-        container.querySelector('.page-loading').innerHTML = `
+            showToast('FO concluído e movido para Encerrados', 'success');
+
+            // Remove from list and re-render
+            fos = fos.filter(f => f.id !== foId);
+            renderFOList();
+
+          } catch (error) {
+            console.error('Erro ao concluir FO:', error);
+            alert('Erro ao concluir FO: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = `${icons.check} Concluído`;
+          }
+        });
+      });
+
+      // Setup return buttons (back to Consolidar)
+      container.querySelectorAll('[data-action="return"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('.expandable-card');
+          const foId = card?.dataset.foId;
+          if (!foId) return;
+
+          if (!confirm('Deseja retornar este FO para a etapa anterior (Consolidar)?')) return;
+
+          try {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Retornando...';
+
+            await updateDoc(doc(db, 'fatosObservados', foId), {
+              status: FO_STATUS.CONSOLIDAR,
+              updatedAt: new Date().toISOString()
+            });
+
+            showToast('FO retornado para Consolidar', 'success');
+            fos = fos.filter(f => f.id !== foId);
+            renderFOList();
+
+          } catch (error) {
+            console.error('Erro ao retornar FO:', error);
+            showToast('Erro ao retornar FO', 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+
+      // Setup delete buttons (admin only)
+      container.querySelectorAll('[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('.expandable-card');
+          const foId = card?.dataset.foId;
+          if (!foId) return;
+
+          if (!confirm('⚠️ ATENÇÃO: Esta ação é irreversível!\n\nDeseja realmente EXCLUIR este FO permanentemente?')) return;
+
+          try {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Excluindo...';
+
+            await deleteDoc(doc(db, 'fatosObservados', foId));
+
+            showToast('FO excluído permanentemente', 'success');
+            fos = fos.filter(f => f.id !== foId);
+            renderFOList();
+
+          } catch (error) {
+            console.error('Erro ao excluir FO:', error);
+            showToast('Erro ao excluir FO', 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+  } catch (error) {
+    console.error('Erro ao carregar FOs:', error);
+    container.querySelector('.page-loading').innerHTML = `
       <p style="color: var(--color-danger-500);">Erro ao carregar: ${error.message}</p>
     `;
-    }
+  }
 }
 
 // Styles

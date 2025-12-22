@@ -146,7 +146,7 @@ function renderDashboard() {
     <!-- Top Cards -->
     <div class="stats-grid">
       <div class="stats-card">
-        <div class="stats-card__icon" style="color: var(--color-primary-600); background: var(--color-primary-50)">
+        <div class="stats-card__icon" style="color: var(--color-warning-600); background: var(--color-warning-50)">
           ${icons.warning}
         </div>
         <div class="stats-card__value">${stats.pendentes}</div>
@@ -158,7 +158,7 @@ function renderDashboard() {
           ${icons.check}
         </div>
         <div class="stats-card__value">${stats.positivos}</div>
-        <div class="stats-card__label">FOs Positivos (Total)</div>
+        <div class="stats-card__label">FOs Positivos</div>
       </div>
       
       <div class="stats-card">
@@ -166,7 +166,15 @@ function renderDashboard() {
           ${icons.close}
         </div>
         <div class="stats-card__value">${stats.negativos}</div>
-        <div class="stats-card__label">FOs Negativos (Total)</div>
+        <div class="stats-card__label">FOs Negativos</div>
+      </div>
+      
+      <div class="stats-card">
+        <div class="stats-card__icon" style="color: var(--color-neutral-600); background: var(--color-neutral-100)">
+          ${icons.document}
+        </div>
+        <div class="stats-card__value">${stats.neutros}</div>
+        <div class="stats-card__label">FOs Neutros</div>
       </div>
       
       <div class="stats-card">
@@ -177,6 +185,31 @@ function renderDashboard() {
         <div class="stats-card__label">Alunos Ativos</div>
       </div>
     </div>
+    
+    <!-- Monthly Breakdown Table -->
+    <div class="card" style="margin-bottom: var(--space-4);">
+      <div class="card__header">
+        <h3 class="card__title">Resumo Mensal</h3>
+      </div>
+      <div class="card__body" style="padding: 0; overflow-x: auto;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Mês</th>
+              <th style="text-align: center;">Positivos</th>
+              <th style="text-align: center;">Negativos</th>
+              <th style="text-align: center;">Neutros</th>
+              <th style="text-align: center;">Sanções</th>
+              <th style="text-align: center;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderMonthlyTable(stats.monthlyBreakdown)}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
 
     <!-- Charts Row 1 -->
     <div class="charts-grid">
@@ -266,6 +299,7 @@ function processStats(fos, students) {
   const pendentes = fos.filter(fo => fo.status === FO_STATUS.PENDENTE).length;
   const positivos = fos.filter(fo => fo.tipo === TIPO_FATO.POSITIVO).length;
   const negativos = fos.filter(fo => fo.tipo === TIPO_FATO.NEGATIVO).length;
+  const neutros = fos.filter(fo => fo.tipo === TIPO_FATO.NEUTRO).length;
 
   // 2. Sanctions Distribution
   const sancoes = {
@@ -365,14 +399,59 @@ function processStats(fos, students) {
     .slice(0, 10) // Top 10
     .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
 
+  // 8. Monthly Breakdown by Type
+  const monthlyBreakdown = {};
+  fos.forEach(fo => {
+    let date = null;
+    if (fo.createdAt?.toDate) {
+      date = fo.createdAt.toDate();
+    } else if (fo.createdAt) {
+      date = new Date(fo.createdAt);
+    }
+    if (!date) return;
+
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const monthLabel = new Date(date.getFullYear(), date.getMonth(), 1)
+      .toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+
+    if (!monthlyBreakdown[monthKey]) {
+      monthlyBreakdown[monthKey] = {
+        label: monthLabel,
+        positivos: 0,
+        negativos: 0,
+        neutros: 0,
+        sancoes: 0,
+        total: 0
+      };
+    }
+
+    monthlyBreakdown[monthKey].total++;
+
+    if (fo.tipo === TIPO_FATO.POSITIVO) monthlyBreakdown[monthKey].positivos++;
+    if (fo.tipo === TIPO_FATO.NEGATIVO) monthlyBreakdown[monthKey].negativos++;
+    if (fo.tipo === TIPO_FATO.NEUTRO) monthlyBreakdown[monthKey].neutros++;
+
+    // Count sanctions
+    if (fo.sancaoDisciplinar && fo.sancaoDisciplinar !== 'JUSTIFICADO') {
+      monthlyBreakdown[monthKey].sancoes++;
+    }
+  });
+
+  // Sort by month
+  const sortedMonthlyBreakdown = Object.entries(monthlyBreakdown)
+    .sort((a, b) => b[0].localeCompare(a[0])) // Most recent first
+    .map(([key, value]) => value);
+
   return {
     totalAlunos: students.length,
     pendentes,
     positivos,
     negativos,
+    neutros,
     sancoesTypes,
     comportamento,
     monthlyData,
+    monthlyBreakdown: sortedMonthlyBreakdown,
     topNegativos,
     topPositivos,
     turmasData,
@@ -539,6 +618,26 @@ function renderStudentRankList(list, type) {
       </div>
       <span class="rank-value">${type === 'negativo' ? item.negativos : item.positivos}</span>
     </li>
+  `).join('');
+}
+
+/**
+ * Render Monthly Breakdown Table
+ */
+function renderMonthlyTable(data) {
+  if (!data || data.length === 0) {
+    return `<tr><td colspan="6" style="text-align: center; color: var(--text-tertiary);">Nenhum dado disponível</td></tr>`;
+  }
+
+  return data.map(row => `
+    <tr>
+      <td><strong>${row.label}</strong></td>
+      <td style="text-align: center; color: var(--color-success-600);">${row.positivos}</td>
+      <td style="text-align: center; color: var(--color-danger-600);">${row.negativos}</td>
+      <td style="text-align: center; color: var(--text-secondary);">${row.neutros}</td>
+      <td style="text-align: center; color: var(--color-warning-600);">${row.sancoes}</td>
+      <td style="text-align: center;"><strong>${row.total}</strong></td>
+    </tr>
   `).join('');
 }
 
