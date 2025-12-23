@@ -5,9 +5,11 @@ import { getSession, COMPANY_NAMES } from '../firebase/auth.js';
 import { icons } from '../utils/icons.js';
 
 export function renderHeader(pageTitle = 'Dashboard') {
-    const session = getSession();
+  const session = getSession();
+  const currentTheme = localStorage.getItem('theme') || 'light';
+  const isDark = currentTheme === 'dark';
 
-    return `
+  return `
     <header class="header">
       <div class="header__left">
         <button class="header__menu-btn" id="menu-btn" aria-label="Menu">
@@ -23,12 +25,9 @@ export function renderHeader(pageTitle = 'Dashboard') {
           </span>
         ` : ''}
         
-        <div class="header__notifications">
-          <button class="header__notification-btn" aria-label="Notificações">
-            ${icons.bell}
-          </button>
-          <span class="header__notification-badge" id="notification-badge" style="display: none;"></span>
-        </div>
+        <button class="header__theme-btn" id="theme-toggle-btn" aria-label="Alternar tema" title="${isDark ? 'Modo claro' : 'Modo escuro'}">
+          ${isDark ? icons.sun : icons.moon}
+        </button>
         
         <div class="dropdown" id="user-dropdown">
           <button class="avatar" id="user-menu-btn" title="${session.username}">
@@ -56,46 +55,77 @@ export function renderHeader(pageTitle = 'Dashboard') {
 }
 
 export function setupHeaderEvents() {
-    const userMenuBtn = document.getElementById('user-menu-btn');
-    const userMenu = document.getElementById('user-menu');
-    const headerLogoutBtn = document.getElementById('header-logout-btn');
+  const userMenuBtn = document.getElementById('user-menu-btn');
+  const userMenu = document.getElementById('user-menu');
+  const headerLogoutBtn = document.getElementById('header-logout-btn');
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
 
-    if (userMenuBtn && userMenu) {
-        userMenuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            userMenu.classList.toggle('active');
-        });
+  // Initialize theme on load
+  initTheme();
 
-        // Close on click outside
-        document.addEventListener('click', () => {
-            userMenu.classList.remove('active');
-        });
-    }
+  if (userMenuBtn && userMenu) {
+    userMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userMenu.classList.toggle('active');
+    });
 
-    if (headerLogoutBtn) {
-        headerLogoutBtn.addEventListener('click', () => {
-            if (confirm('Deseja realmente sair?')) {
-                import('../firebase/auth.js').then(({ logout }) => logout());
-            }
-        });
-    }
+    // Close on click outside
+    document.addEventListener('click', () => {
+      userMenu.classList.remove('active');
+    });
+  }
+
+  if (headerLogoutBtn) {
+    headerLogoutBtn.addEventListener('click', () => {
+      if (confirm('Deseja realmente sair?')) {
+        import('../firebase/auth.js').then(({ logout }) => logout());
+      }
+    });
+  }
+
+  // Theme toggle event
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      toggleTheme();
+    });
+  }
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+
+  // Update button icon
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  if (themeToggleBtn) {
+    themeToggleBtn.innerHTML = newTheme === 'dark' ? icons.sun : icons.moon;
+    themeToggleBtn.title = newTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
+  }
 }
 
 function getInitials(username) {
-    if (!username) return '?';
-    const match = username.match(/([A-Za-z]).*?(\d)/);
-    if (match) {
-        return match[1].toUpperCase() + match[2];
-    }
-    return username.substring(0, 2).toUpperCase();
+  if (!username) return '?';
+  const match = username.match(/([A-Za-z]).*?(\d)/);
+  if (match) {
+    return match[1].toUpperCase() + match[2];
+  }
+  return username.substring(0, 2).toUpperCase();
 }
 
 function getRoleLabel(role) {
-    const labels = {
-        'admin': 'Administrador',
-        'comandoCA': 'Comando CA',
-        'commander': 'Comandante',
-        'sergeant': 'Sargenteante'
-    };
-    return labels[role] || role;
+  const labels = {
+    'admin': 'Administrador',
+    'comandoCA': 'Comando CA',
+    'commander': 'Comandante',
+    'sergeant': 'Sargenteante'
+  };
+  return labels[role] || role;
 }

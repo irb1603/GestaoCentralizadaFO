@@ -80,5 +80,10 @@ service cloud.firestore {
     match /termosCiencia/{termoId} {
       allow read, write: if true;
     }
+    
+    // Outros documentos (não-termos) do processo disciplinar
+    match /outrosDocumentos/{docId} {
+      allow read, write: if true;
+    }
   }
 }

@@ -4,20 +4,20 @@
 import { getSession, getCompanyFilter } from '../firebase/auth.js';
 import { db } from '../firebase/config.js';
 import {
-    collection,
-    getDocs,
-    doc,
-    updateDoc,
-    query,
-    where,
-    setDoc,
-    getDoc
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  query,
+  where,
+  setDoc,
+  getDoc
 } from 'firebase/firestore';
 import {
-    COMPANY_NAMES,
-    FO_STATUS_LABELS,
-    SANCAO_DISCIPLINAR,
-    formatDate
+  COMPANY_NAMES,
+  FO_STATUS_LABELS,
+  SANCAO_DISCIPLINAR,
+  formatDate
 } from '../constants/index.js';
 import { icons } from '../utils/icons.js';
 
@@ -25,10 +25,10 @@ let allStudents = [];
 let studentFOs = {};
 
 export async function renderComportamentoPage() {
-    const pageContent = document.getElementById('page-content');
-    const companyFilter = getCompanyFilter();
+  const pageContent = document.getElementById('page-content');
+  const companyFilter = getCompanyFilter();
 
-    pageContent.innerHTML = `
+  pageContent.innerHTML = `
     <div class="page-header">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-4);">
         <div>
@@ -37,10 +37,17 @@ export async function renderComportamentoPage() {
             ${companyFilter ? COMPANY_NAMES[companyFilter] || companyFilter : 'Todas as Companhias'}
           </p>
         </div>
-        <button class="btn btn--primary" id="save-all-btn">
-          ${icons.check}
-          <span>Salvar Todas Notas</span>
-        </button>
+        <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+          <input type="file" id="csv-import-input" accept=".csv" style="display: none;">
+          <button class="btn btn--secondary" id="import-csv-btn">
+            ${icons.upload}
+            <span>Importar CSV</span>
+          </button>
+          <button class="btn btn--primary" id="save-all-btn">
+            ${icons.check}
+            <span>Salvar Todas Notas</span>
+          </button>
+        </div>
       </div>
     </div>
     
@@ -239,65 +246,65 @@ export async function renderComportamentoPage() {
     </style>
   `;
 
-    // Setup events
-    setupComportamentoEvents();
+  // Setup events
+  setupComportamentoEvents();
 
-    // Load data
-    await loadComportamentoData();
+  // Load data
+  await loadComportamentoData();
 }
 
 async function loadComportamentoData(searchTerm = '', turmaFilter = '') {
-    const container = document.getElementById('comportamento-container');
-    const countEl = document.getElementById('student-count');
-    const turmaSelect = document.getElementById('filter-turma');
-    const companyFilter = getCompanyFilter();
+  const container = document.getElementById('comportamento-container');
+  const countEl = document.getElementById('student-count');
+  const turmaSelect = document.getElementById('filter-turma');
+  const companyFilter = getCompanyFilter();
 
-    try {
-        // Load students
-        let q;
-        if (companyFilter) {
-            q = query(collection(db, 'students'), where('company', '==', companyFilter));
-        } else {
-            q = query(collection(db, 'students'));
-        }
+  try {
+    // Load students
+    let q;
+    if (companyFilter) {
+      q = query(collection(db, 'students'), where('company', '==', companyFilter));
+    } else {
+      q = query(collection(db, 'students'));
+    }
 
-        const snapshot = await getDocs(q);
-        allStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const snapshot = await getDocs(q);
+    allStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Sort by turma then numero
-        allStudents.sort((a, b) => {
-            const turmaCompare = String(a.turma || '').localeCompare(String(b.turma || ''));
-            if (turmaCompare !== 0) return turmaCompare;
-            return (a.numero || 0) - (b.numero || 0);
-        });
+    // Sort by turma then numero
+    allStudents.sort((a, b) => {
+      const turmaCompare = String(a.turma || '').localeCompare(String(b.turma || ''));
+      if (turmaCompare !== 0) return turmaCompare;
+      return (a.numero || 0) - (b.numero || 0);
+    });
 
-        // Populate turma filter
-        const turmas = [...new Set(allStudents.map(s => s.turma).filter(Boolean))].sort();
-        turmaSelect.innerHTML = '<option value="">Todas as turmas</option>' +
-            turmas.map(t => `<option value="${t}" ${t === turmaFilter ? 'selected' : ''}>Turma ${t}</option>`).join('');
+    // Populate turma filter
+    const turmas = [...new Set(allStudents.map(s => s.turma).filter(Boolean))].sort();
+    turmaSelect.innerHTML = '<option value="">Todas as turmas</option>' +
+      turmas.map(t => `<option value="${t}" ${t === turmaFilter ? 'selected' : ''}>Turma ${t}</option>`).join('');
 
-        // Load FOs for all students
-        await loadStudentFOs();
+    // Load FOs for all students
+    await loadStudentFOs();
 
-        // Apply filters
-        let filteredStudents = allStudents;
+    // Apply filters
+    let filteredStudents = allStudents;
 
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filteredStudents = filteredStudents.filter(s =>
-                String(s.numero).includes(term) ||
-                s.nome?.toLowerCase().includes(term)
-            );
-        }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filteredStudents = filteredStudents.filter(s =>
+        String(s.numero).includes(term) ||
+        s.nome?.toLowerCase().includes(term)
+      );
+    }
 
-        if (turmaFilter) {
-            filteredStudents = filteredStudents.filter(s => s.turma === turmaFilter);
-        }
+    if (turmaFilter) {
+      filteredStudents = filteredStudents.filter(s => s.turma === turmaFilter);
+    }
 
-        countEl.textContent = filteredStudents.length;
+    countEl.textContent = filteredStudents.length;
 
-        if (filteredStudents.length === 0) {
-            container.innerHTML = `
+    if (filteredStudents.length === 0) {
+      container.innerHTML = `
         <div class="card">
           <div class="card__body">
             <div class="empty-state">
@@ -307,18 +314,18 @@ async function loadComportamentoData(searchTerm = '', turmaFilter = '') {
           </div>
         </div>
       `;
-            return;
-        }
+      return;
+    }
 
-        // Render cards
-        container.innerHTML = filteredStudents.map(student => renderComportamentoCard(student)).join('');
+    // Render cards
+    container.innerHTML = filteredStudents.map(student => renderComportamentoCard(student)).join('');
 
-        // Setup card events
-        setupCardEvents();
+    // Setup card events
+    setupCardEvents();
 
-    } catch (error) {
-        console.error('Error loading data:', error);
-        container.innerHTML = `
+  } catch (error) {
+    console.error('Error loading data:', error);
+    container.innerHTML = `
       <div class="alert alert--danger">
         <div class="alert__icon">${icons.warning}</div>
         <div class="alert__content">
@@ -326,54 +333,54 @@ async function loadComportamentoData(searchTerm = '', turmaFilter = '') {
         </div>
       </div>
     `;
-    }
+  }
 }
 
 async function loadStudentFOs() {
-    const companyFilter = getCompanyFilter();
+  const companyFilter = getCompanyFilter();
 
-    try {
-        let q;
-        if (companyFilter) {
-            q = query(collection(db, 'fatosObservados'), where('company', '==', companyFilter));
-        } else {
-            q = query(collection(db, 'fatosObservados'));
-        }
-
-        const snapshot = await getDocs(q);
-        const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // Group by student number
-        studentFOs = {};
-        for (const fo of fos) {
-            for (const numero of (fo.studentNumbers || [])) {
-                if (!studentFOs[numero]) {
-                    studentFOs[numero] = [];
-                }
-                studentFOs[numero].push(fo);
-            }
-        }
-
-        // Sort each student's FOs by date
-        for (const numero in studentFOs) {
-            studentFOs[numero].sort((a, b) => new Date(b.dataFato) - new Date(a.dataFato));
-        }
-
-    } catch (error) {
-        console.error('Error loading FOs:', error);
+  try {
+    let q;
+    if (companyFilter) {
+      q = query(collection(db, 'fatosObservados'), where('company', '==', companyFilter));
+    } else {
+      q = query(collection(db, 'fatosObservados'));
     }
+
+    const snapshot = await getDocs(q);
+    const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Group by student number
+    studentFOs = {};
+    for (const fo of fos) {
+      for (const numero of (fo.studentNumbers || [])) {
+        if (!studentFOs[numero]) {
+          studentFOs[numero] = [];
+        }
+        studentFOs[numero].push(fo);
+      }
+    }
+
+    // Sort each student's FOs by date
+    for (const numero in studentFOs) {
+      studentFOs[numero].sort((a, b) => new Date(b.dataFato) - new Date(a.dataFato));
+    }
+
+  } catch (error) {
+    console.error('Error loading FOs:', error);
+  }
 }
 
 function renderComportamentoCard(student) {
-    // Get or default grade to 10
-    const grade = student.notaComportamento ?? 10;
-    const gradeClass = grade >= 8 ? 'grade-high' : grade >= 5 ? 'grade-medium' : 'grade-low';
+  // Get or default grade to 10
+  const grade = student.notaComportamento ?? 10;
+  const gradeClass = grade >= 8 ? 'grade-high' : grade >= 5 ? 'grade-medium' : 'grade-low';
 
-    // Get student's FOs
-    const fos = studentFOs[student.numero] || [];
-    const sanctionCount = fos.filter(fo => fo.tipo === 'negativo' && fo.status !== 'pendente').length;
+  // Get student's FOs
+  const fos = studentFOs[student.numero] || [];
+  const sanctionCount = fos.filter(fo => fo.tipo === 'negativo' && fo.status !== 'pendente').length;
 
-    return `
+  return `
     <div class="comportamento-card" data-id="${student.id}" data-numero="${student.numero}">
       <div class="comportamento-card__header" onclick="toggleComportamentoCard('${student.id}')">
         <div class="comportamento-card__student">
@@ -409,10 +416,10 @@ function renderComportamentoCard(student) {
             </div>
           ` : `
             ${fos.map(fo => {
-        const isPositive = fo.tipo === 'positivo';
-        const sancao = fo.sancaoDisciplinar ? SANCAO_DISCIPLINAR[fo.sancaoDisciplinar] : FO_STATUS_LABELS[fo.status] || fo.status;
+    const isPositive = fo.tipo === 'positivo';
+    const sancao = fo.sancaoDisciplinar ? SANCAO_DISCIPLINAR[fo.sancaoDisciplinar] : FO_STATUS_LABELS[fo.status] || fo.status;
 
-        return `
+    return `
                 <div class="sanction-item ${isPositive ? 'sanction-item--positive' : ''}">
                   <div class="sanction-item__date">${formatDate(fo.dataFato)}</div>
                   <div>
@@ -424,7 +431,7 @@ function renderComportamentoCard(student) {
                   </div>
                 </div>
               `;
-    }).join('')}
+  }).join('')}
           `}
         </div>
       </div>
@@ -433,102 +440,209 @@ function renderComportamentoCard(student) {
 }
 
 function setupComportamentoEvents() {
-    const searchInput = document.getElementById('search-aluno');
-    const turmaFilter = document.getElementById('filter-turma');
-    const saveAllBtn = document.getElementById('save-all-btn');
+  const searchInput = document.getElementById('search-aluno');
+  const turmaFilter = document.getElementById('filter-turma');
+  const saveAllBtn = document.getElementById('save-all-btn');
+  const importCsvBtn = document.getElementById('import-csv-btn');
+  const csvImportInput = document.getElementById('csv-import-input');
 
-    // Search with debounce
-    if (searchInput) {
-        let debounce;
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(debounce);
-            debounce = setTimeout(() => {
-                loadComportamentoData(e.target.value, turmaFilter.value);
-            }, 300);
-        });
+  // Search with debounce
+  if (searchInput) {
+    let debounce;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        loadComportamentoData(e.target.value, turmaFilter.value);
+      }, 300);
+    });
+  }
+
+  // Turma filter
+  if (turmaFilter) {
+    turmaFilter.addEventListener('change', (e) => {
+      loadComportamentoData(searchInput.value, e.target.value);
+    });
+  }
+
+  // Save all
+  if (saveAllBtn) {
+    saveAllBtn.addEventListener('click', saveAllGrades);
+  }
+
+  // CSV Import
+  if (importCsvBtn && csvImportInput) {
+    importCsvBtn.addEventListener('click', () => {
+      csvImportInput.click();
+    });
+
+    csvImportInput.addEventListener('change', handleCsvImport);
+  }
+}
+
+async function handleCsvImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const importBtn = document.getElementById('import-csv-btn');
+  importBtn.disabled = true;
+  importBtn.innerHTML = '<span class="spinner"></span> Importando...';
+
+  try {
+    const text = await file.text();
+    const lines = text.split('\n').filter(line => line.trim());
+
+    if (lines.length < 2) {
+      throw new Error('CSV vazio ou sem dados');
     }
 
-    // Turma filter
-    if (turmaFilter) {
-        turmaFilter.addEventListener('change', (e) => {
-            loadComportamentoData(searchInput.value, e.target.value);
-        });
+    // Parse header
+    const header = lines[0].toLowerCase().split(/[;,]/).map(h => h.trim());
+    const numeroIdx = header.findIndex(h => h.includes('numero') || h.includes('número'));
+    const dataIdx = header.findIndex(h => h.includes('data') || h.includes('consolidacao') || h.includes('consolidação'));
+    const notaIdx = header.findIndex(h => h.includes('nota') || h.includes('comportamento'));
+
+    if (numeroIdx === -1 || notaIdx === -1) {
+      throw new Error('CSV deve conter colunas: numero e nota (ou notaComportamento)');
     }
 
-    // Save all
-    if (saveAllBtn) {
-        saveAllBtn.addEventListener('click', saveAllGrades);
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Process each line
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(/[;,]/).map(v => v.trim());
+      const numero = parseInt(values[numeroIdx]);
+      const nota = parseFloat(values[notaIdx].replace(',', '.'));
+      const dataConsolidacao = dataIdx !== -1 ? parseDate(values[dataIdx]) : null;
+
+      if (isNaN(numero) || isNaN(nota)) {
+        errorCount++;
+        continue;
+      }
+
+      // Find student by numero
+      const student = allStudents.find(s => s.numero === numero);
+      if (student) {
+        try {
+          const updateData = {
+            notaComportamento: nota,
+            updatedAt: new Date().toISOString()
+          };
+          if (dataConsolidacao) {
+            updateData.dataConsolidacao = dataConsolidacao;
+          }
+          await updateDoc(doc(db, 'students', student.id), updateData);
+          successCount++;
+        } catch (e) {
+          console.error('Error updating student:', numero, e);
+          errorCount++;
+        }
+      } else {
+        errorCount++;
+      }
     }
+
+    showToast(`Importação concluída: ${successCount} atualizados, ${errorCount} erros`, 'success');
+
+    // Reload data
+    await loadComportamentoData();
+
+  } catch (error) {
+    console.error('CSV Import error:', error);
+    showToast('Erro ao importar CSV: ' + error.message, 'error');
+  } finally {
+    importBtn.disabled = false;
+    importBtn.innerHTML = `${icons.upload} <span>Importar CSV</span>`;
+    event.target.value = ''; // Reset file input
+  }
+}
+
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+
+  // Try DD/MM/YYYY format
+  const brMatch = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brMatch) {
+    return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+  }
+
+  // Try YYYY-MM-DD format
+  const isoMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return dateStr;
+  }
+
+  return null;
 }
 
 function setupCardEvents() {
-    // Card toggle is handled by onclick in HTML
+  // Card toggle is handled by onclick in HTML
 }
 
 // Global functions
 window.toggleComportamentoCard = function (studentId) {
-    const card = document.querySelector(`.comportamento-card[data-id="${studentId}"]`);
-    if (card) {
-        card.classList.toggle('expanded');
-    }
+  const card = document.querySelector(`.comportamento-card[data-id="${studentId}"]`);
+  if (card) {
+    card.classList.toggle('expanded');
+  }
 };
 
 window.updateGradeClass = function (input) {
-    const value = parseFloat(input.value);
-    input.classList.remove('grade-high', 'grade-medium', 'grade-low');
+  const value = parseFloat(input.value);
+  input.classList.remove('grade-high', 'grade-medium', 'grade-low');
 
-    if (value >= 8) {
-        input.classList.add('grade-high');
-    } else if (value >= 5) {
-        input.classList.add('grade-medium');
-    } else {
-        input.classList.add('grade-low');
-    }
+  if (value >= 8) {
+    input.classList.add('grade-high');
+  } else if (value >= 5) {
+    input.classList.add('grade-medium');
+  } else {
+    input.classList.add('grade-low');
+  }
 };
 
 async function saveAllGrades() {
-    const saveBtn = document.getElementById('save-all-btn');
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<span class="spinner"></span> Salvando...';
+  const saveBtn = document.getElementById('save-all-btn');
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner"></span> Salvando...';
 
-    try {
-        const gradeInputs = document.querySelectorAll('[data-field="notaComportamento"]');
+  try {
+    const gradeInputs = document.querySelectorAll('[data-field="notaComportamento"]');
 
-        for (const input of gradeInputs) {
-            const studentId = input.dataset.id;
-            const grade = parseFloat(input.value);
+    for (const input of gradeInputs) {
+      const studentId = input.dataset.id;
+      const grade = parseFloat(input.value);
 
-            if (!isNaN(grade)) {
-                await updateDoc(doc(db, 'students', studentId), {
-                    notaComportamento: grade,
-                    updatedAt: new Date().toISOString()
-                });
-            }
-        }
-
-        showToast('Notas salvas com sucesso!', 'success');
-
-    } catch (error) {
-        console.error('Error saving grades:', error);
-        showToast('Erro ao salvar notas', 'error');
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = `${icons.check} <span>Salvar Todas Notas</span>`;
+      if (!isNaN(grade)) {
+        await updateDoc(doc(db, 'students', studentId), {
+          notaComportamento: grade,
+          updatedAt: new Date().toISOString()
+        });
+      }
     }
+
+    showToast('Notas salvas com sucesso!', 'success');
+
+  } catch (error) {
+    console.error('Error saving grades:', error);
+    showToast('Erro ao salvar notas', 'error');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = `${icons.check} <span>Salvar Todas Notas</span>`;
+  }
 }
 
 function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast toast--${type}`;
-    toast.innerHTML = `<span>${message}</span>`;
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${type}`;
+  toast.innerHTML = `<span>${message}</span>`;
 
-    let container = document.querySelector('.toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'toast-container';
-        document.body.appendChild(container);
-    }
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
 
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
 }

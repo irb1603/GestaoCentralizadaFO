@@ -14,7 +14,7 @@ export function renderSidebar(activePage = 'inicial') {
       <div class="sidebar__header">
         <div class="sidebar__logo">
           <div class="sidebar__logo-icon">
-            <img src="/images/CMB.jpeg" alt="Logo CMB" style="width: 100%; height: 100%; border-radius: 8px; object-fit: cover;">
+            <img src="/images/CMB.jpeg" alt="Logo CMB" style="width: 100%; height: 100%; border-radius: 8px; object-fit: contain;">
           </div>
           <div class="sidebar__logo-text">
             Gestão FO

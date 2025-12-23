@@ -148,8 +148,10 @@ export async function renderProcessoDisciplinarPage(container) {
   let allStudents = [];
   let studentFOs = {};
   let studentTermos = {};
+  let studentOutrosDocs = {};
   let selectedFile = null;
   let currentUploadStudent = null;
+  let currentUploadType = 'termo'; // 'termo' or 'outros'
 
   try {
     // Load students with FOs
@@ -199,6 +201,17 @@ export async function renderProcessoDisciplinarPage(container) {
         studentTermos[termo.studentNumber] = [];
       }
       studentTermos[termo.studentNumber].push(termo);
+    });
+
+    // Load outros documentos
+    const outrosQuery = query(collection(db, 'outrosDocumentos'));
+    const outrosSnapshot = await getDocs(outrosQuery);
+    outrosSnapshot.docs.forEach(doc => {
+      const outro = { id: doc.id, ...doc.data() };
+      if (!studentOutrosDocs[outro.studentNumber]) {
+        studentOutrosDocs[outro.studentNumber] = [];
+      }
+      studentOutrosDocs[outro.studentNumber].push(outro);
     });
 
     // Hide loading
@@ -295,6 +308,7 @@ export async function renderProcessoDisciplinarPage(container) {
               ${turmaStudents.map(student => {
         const fos = studentFOs[student.numero] || [];
         const termos = studentTermos[student.numero] || [];
+        const outrosDocs = studentOutrosDocs[student.numero] || [];
 
         return `
                   <div class="student-card" data-numero="${student.numero}">
@@ -315,6 +329,12 @@ export async function renderProcessoDisciplinarPage(container) {
                         <span class="stat-value">${termos.length}</span>
                         <span class="stat-label">Termos</span>
                       </div>
+                      ${outrosDocs.length > 0 ? `
+                      <div class="stat">
+                        <span class="stat-value">${outrosDocs.length}</span>
+                        <span class="stat-label">Outros Doc</span>
+                      </div>
+                      ` : ''}
                     </div>
                     
                     ${termos.length > 0 ? `
@@ -332,8 +352,8 @@ export async function renderProcessoDisciplinarPage(container) {
                       <button class="btn btn--secondary btn--sm btn-upload" data-numero="${student.numero}" data-nome="${student.nome}">
                         ${icons.upload} Upload Termo
                       </button>
-                      <button class="btn btn--ghost btn--sm btn-view-fos" data-numero="${student.numero}">
-                        ${icons.eye} Ver FOs
+                      <button class="btn btn--ghost btn--sm btn-upload-outros" data-numero="${student.numero}" data-nome="${student.nome}">
+                        ${icons.upload} Upload outros
                       </button>
                     </div>
                   </div>
@@ -352,6 +372,19 @@ export async function renderProcessoDisciplinarPage(container) {
           numero: btn.dataset.numero,
           nome: btn.dataset.nome
         };
+        currentUploadType = 'termo';
+        openUploadModal();
+      });
+    });
+
+    // Setup outros upload buttons
+    listContainer.querySelectorAll('.btn-upload-outros').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentUploadStudent = {
+          numero: btn.dataset.numero,
+          nome: btn.dataset.nome
+        };
+        currentUploadType = 'outros';
         openUploadModal();
       });
     });
@@ -360,6 +393,15 @@ export async function renderProcessoDisciplinarPage(container) {
   function openUploadModal() {
     const modal = document.getElementById('upload-modal');
     const studentInfo = document.getElementById('upload-modal-student');
+    const modalTitle = modal.querySelector('.processo-modal__header h3');
+
+    // Update modal title based on type
+    if (modalTitle) {
+      modalTitle.textContent = currentUploadType === 'outros'
+        ? 'Upload de Outro Documento'
+        : 'Upload de Termo de Ciência';
+    }
+
     studentInfo.textContent = `Aluno: ${currentUploadStudent.numero} - ${currentUploadStudent.nome}`;
 
     // Reset
@@ -420,7 +462,14 @@ export async function renderProcessoDisciplinarPage(container) {
     try {
       const storage = getStorage();
       const timestamp = Date.now();
-      const filename = `termos-ciencia/${currentUploadStudent.numero}/termo_${timestamp}.${selectedFile.name.split('.').pop()}`;
+
+      // Determine folder and collection based on upload type
+      const isOutros = currentUploadType === 'outros';
+      const folder = isOutros ? 'outros-documentos' : 'termos-ciencia';
+      const collectionName = isOutros ? 'outrosDocumentos' : 'termosCiencia';
+      const prefix = isOutros ? 'doc' : 'termo';
+
+      const filename = `${folder}/${currentUploadStudent.numero}/${prefix}_${timestamp}.${selectedFile.name.split('.').pop()}`;
       const storageRef = ref(storage, filename);
 
       // Upload file
@@ -428,7 +477,7 @@ export async function renderProcessoDisciplinarPage(container) {
       const downloadURL = await getDownloadURL(storageRef);
 
       // Save metadata to Firestore
-      const termData = {
+      const docData = {
         studentNumber: currentUploadStudent.numero,
         fileName: selectedFile.name,
         fileUrl: downloadURL,
@@ -436,28 +485,30 @@ export async function renderProcessoDisciplinarPage(container) {
         uploadedBy: session?.company || 'unknown'
       };
 
-      const docRef = await addDoc(collection(db, 'termosCiencia'), termData);
+      const docRef = await addDoc(collection(db, collectionName), docData);
 
       // Audit Log
-      await logAction('create', 'termosCiencia', docRef.id, null, termData);
+      await logAction('create', collectionName, docRef.id, null, docData);
 
       // Update local cache
-      if (!studentTermos[currentUploadStudent.numero]) {
-        studentTermos[currentUploadStudent.numero] = [];
+      const cacheObj = isOutros ? studentOutrosDocs : studentTermos;
+      if (!cacheObj[currentUploadStudent.numero]) {
+        cacheObj[currentUploadStudent.numero] = [];
       }
-      studentTermos[currentUploadStudent.numero].push({
+      cacheObj[currentUploadStudent.numero].push({
         fileUrl: downloadURL,
         uploadedAt: new Date().toISOString()
       });
 
-      showToast('Termo enviado com sucesso!', 'success');
+      const successMessage = isOutros ? 'Documento enviado com sucesso!' : 'Termo enviado com sucesso!';
+      showToast(successMessage, 'success');
       document.getElementById('upload-modal').classList.remove('active');
 
       // Re-render
       renderStudentsList(allStudents);
 
     } catch (error) {
-      console.error('Erro ao enviar termo:', error);
+      console.error('Erro ao enviar documento:', error);
       showToast('Erro ao enviar: ' + error.message, 'error');
     } finally {
       confirmBtn.disabled = false;
