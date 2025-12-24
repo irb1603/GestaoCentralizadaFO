@@ -46,6 +46,16 @@ export const USER_ACCOUNTS = {
     // 3ª Companhia (3º Ano EM)
     'Cmt3cia': { role: 'commander', company: '3cia', canEditAll: false, canViewAudit: true },
     'Sgte3cia': { role: 'sergeant', company: '3cia', canEditAll: false, canViewAudit: false },
+
+    // Auxiliar - acesso restrito apenas a Faltas Escolares e Processo Disciplinar
+    'donafatima': {
+        role: 'auxiliar',
+        company: '3cia',
+        canEditAll: false,
+        canViewAudit: false,
+        allowedPages: ['faltas-escolares', 'processo-disciplinar'],
+        defaultPassword: '3cia2025'
+    },
 };
 
 // Company names for display
@@ -92,16 +102,19 @@ export async function login(username, password) {
             const userData = userDoc.data();
             passwordValid = userData.password === password;
         } else {
-            // User not in Firestore yet, check if password matches username (default)
-            passwordValid = password === username;
+            // User not in Firestore yet, check if password matches default
+            // For users with defaultPassword (like donafatima), use that; otherwise use username
+            const expectedPassword = userConfig.defaultPassword || username;
+            passwordValid = password === expectedPassword;
 
             if (passwordValid) {
                 // Create user document in Firestore (don't wait)
                 setDoc(doc(db, 'users', username), {
                     username,
-                    password: username, // Default password
+                    password: expectedPassword,
                     role: userConfig.role,
                     company: userConfig.company,
+                    allowedPages: userConfig.allowedPages || null,
                     createdAt: new Date().toISOString(),
                 }).catch(err => console.warn('Could not save user to Firestore:', err));
             }
@@ -109,7 +122,8 @@ export async function login(username, password) {
     } catch (error) {
         // If Firebase is not configured or times out, use local auth
         console.warn('Firebase not available, using local auth:', error.message);
-        passwordValid = password === username;
+        const expectedPassword = userConfig.defaultPassword || username;
+        passwordValid = password === expectedPassword;
     }
 
     if (!passwordValid) {

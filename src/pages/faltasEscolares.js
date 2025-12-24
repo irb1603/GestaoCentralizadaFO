@@ -9,7 +9,8 @@ import { getSession } from '../firebase/auth.js';
 import {
   COLLECTIONS,
   COMPANY_NAMES,
-  USER_ROLES
+  USER_ROLES,
+  TURMA_TO_COMPANY
 } from '../constants/index.js';
 import { icons } from '../utils/icons.js';
 import { getStudents } from '../firebase/database.js';
@@ -18,6 +19,31 @@ import { showToast } from '../utils/toast.js';
 let allStudents = [];
 let historyRecords = [];
 let selectedStudents = [];
+
+/**
+ * Helper function to get company from turma
+ */
+function getCompanyFromTurma(turma) {
+  if (!turma) return null;
+  const firstChar = String(turma).charAt(0);
+  return TURMA_TO_COMPANY[firstChar] || null;
+}
+
+/**
+ * Check if user can see a student based on company
+ */
+function canSeeStudent(student, session) {
+  // Admin and ComandoCA can see all
+  if (session.role === 'admin' || session.role === 'comandoCA') {
+    return true;
+  }
+
+  // For other users, filter by company
+  if (!session.company) return true;
+
+  const studentCompany = getCompanyFromTurma(student.turma);
+  return studentCompany === session.company;
+}
 
 /**
  * Format date value to DD/MM/YYYY string
@@ -67,8 +93,9 @@ export async function renderFaltasEscolaresPage() {
     document.head.appendChild(styleEl);
   }
 
-  // Load students for reference
-  allStudents = await getStudents();
+  // Load students for reference and filter by company
+  const allStudentsRaw = await getStudents();
+  allStudents = allStudentsRaw.filter(student => canSeeStudent(student, session));
 
   // Reset state
   selectedStudents = [];

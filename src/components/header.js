@@ -125,7 +125,8 @@ function getRoleLabel(role) {
     'admin': 'Administrador',
     'comandoCA': 'Comando CA',
     'commander': 'Comandante',
-    'sergeant': 'Sargenteante'
+    'sergeant': 'Sargenteante',
+    'auxiliar': 'Auxiliar'
   };
   return labels[role] || role;
 }

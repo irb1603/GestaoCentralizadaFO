@@ -1,14 +1,36 @@
-// Processo Disciplinar - Student disciplinary process management
-// Gestão Centralizada FO - CMB
-
 import { db } from '../firebase/config.js';
 import { collection, query, where, getDocs, addDoc, orderBy, doc, getDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { icons } from '../utils/icons.js';
-import { FO_STATUS, COMPANY_NAMES, formatDate } from '../constants/index.js';
+import { FO_STATUS, COMPANY_NAMES, formatDate, TURMA_TO_COMPANY } from '../constants/index.js';
 import { showToast } from '../utils/toast.js';
 import { getSession } from '../firebase/auth.js';
 import { logAction } from '../services/auditLogger.js';
+
+/**
+ * Helper function to get company from turma
+ */
+function getCompanyFromTurma(turma) {
+  if (!turma) return null;
+  const firstChar = String(turma).charAt(0);
+  return TURMA_TO_COMPANY[firstChar] || null;
+}
+
+/**
+ * Check if user can see a student based on company
+ */
+function canSeeStudent(student, session) {
+  // Admin and ComandoCA can see all
+  if (session.role === 'admin' || session.role === 'comandoCA') {
+    return true;
+  }
+
+  // For other users, filter by company
+  if (!session.company) return true;
+
+  const studentCompany = getCompanyFromTurma(student.turma);
+  return studentCompany === session.company;
+}
 
 /**
  * Render the Processo Disciplinar page
@@ -187,7 +209,11 @@ export async function renderProcessoDisciplinarPage(container) {
         );
         const studentsSnapshot = await getDocs(studentsQuery);
         studentsSnapshot.docs.forEach(doc => {
-          allStudents.push({ id: doc.id, ...doc.data() });
+          const student = { id: doc.id, ...doc.data() };
+          // Filter by company for non-admin/comandoCA users
+          if (canSeeStudent(student, session)) {
+            allStudents.push(student);
+          }
         });
       }
     }

@@ -9,6 +9,15 @@ export function renderSidebar(activePage = 'inicial') {
   const session = getSession();
   const isConfigOpen = ['dados-alunos', 'auditoria', 'admin'].includes(activePage);
 
+  // Check if user has restricted pages (like auxiliar role)
+  const allowedPages = session.allowedPages || null;
+
+  // Helper function to check if a page should be shown
+  const canShowPage = (pageRoute) => {
+    if (!allowedPages) return true; // No restrictions
+    return allowedPages.includes(pageRoute);
+  };
+
   const sidebarHTML = `
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__header">
@@ -24,6 +33,7 @@ export function renderSidebar(activePage = 'inicial') {
       </div>
       
       <nav class="sidebar__nav">
+        ${!allowedPages ? `
         <div class="sidebar__nav-group">
           <div class="sidebar__nav-label">Menu Principal</div>
           
@@ -52,10 +62,12 @@ export function renderSidebar(activePage = 'inicial') {
             <span>${PAGE_TITLES[ROUTES.RETIRADAS]}</span>
           </a>
         </div>
+        ` : ''}
         
         <div class="sidebar__nav-group">
-          <div class="sidebar__nav-label">Gestão</div>
+          <div class="sidebar__nav-label">${allowedPages ? 'Menu' : 'Gestão'}</div>
           
+          ${!allowedPages ? `
           <a href="/?page=${ROUTES.CONSOLIDAR}" class="sidebar__nav-item ${activePage === ROUTES.CONSOLIDAR ? 'active' : ''}" data-page="${ROUTES.CONSOLIDAR}">
             ${icons.folder}
             <span>${PAGE_TITLES[ROUTES.CONSOLIDAR]}</span>
@@ -75,13 +87,24 @@ export function renderSidebar(activePage = 'inicial') {
             ${icons.trash}
             <span>${PAGE_TITLES[ROUTES.GLPI]}</span>
           </a>
+          ` : ''}
           
+          ${canShowPage(ROUTES.FALTAS_ESCOLARES) ? `
           <a href="/?page=${ROUTES.FALTAS_ESCOLARES}" class="sidebar__nav-item ${activePage === ROUTES.FALTAS_ESCOLARES ? 'active' : ''}" data-page="${ROUTES.FALTAS_ESCOLARES}">
             ${icons.calendar}
             <span>${PAGE_TITLES[ROUTES.FALTAS_ESCOLARES]}</span>
           </a>
+          ` : ''}
+          
+          ${canShowPage(ROUTES.PROCESSO_DISCIPLINAR) ? `
+          <a href="/?page=${ROUTES.PROCESSO_DISCIPLINAR}" class="sidebar__nav-item ${activePage === ROUTES.PROCESSO_DISCIPLINAR ? 'active' : ''}" data-page="${ROUTES.PROCESSO_DISCIPLINAR}">
+            ${icons.folder}
+            <span>Proc. Disciplinar</span>
+          </a>
+          ` : ''}
         </div>
         
+        ${!allowedPages ? `
         <div class="sidebar__nav-group">
           <div class="sidebar__nav-label">Relatórios</div>
           
@@ -98,11 +121,6 @@ export function renderSidebar(activePage = 'inicial') {
           <a href="/?page=${ROUTES.NOTAS_ADITAMENTO}" class="sidebar__nav-item ${activePage === ROUTES.NOTAS_ADITAMENTO ? 'active' : ''}" data-page="${ROUTES.NOTAS_ADITAMENTO}">
             ${icons.edit}
             <span>Notas Aditamento</span>
-          </a>
-          
-          <a href="/?page=${ROUTES.PROCESSO_DISCIPLINAR}" class="sidebar__nav-item ${activePage === ROUTES.PROCESSO_DISCIPLINAR ? 'active' : ''}" data-page="${ROUTES.PROCESSO_DISCIPLINAR}">
-            ${icons.folder}
-            <span>Proc. Disciplinar</span>
           </a>
         </div>
         
@@ -139,6 +157,7 @@ export function renderSidebar(activePage = 'inicial') {
             </div>
           </div>
         </div>
+        ` : ''}
       </nav>
       
       <div class="sidebar__footer">
@@ -237,7 +256,8 @@ function getRoleLabel(role) {
     'admin': 'Administrador',
     'comandoCA': 'Comando CA',
     'commander': 'Comandante',
-    'sergeant': 'Sargenteante'
+    'sergeant': 'Sargenteante',
+    'auxiliar': 'Auxiliar'
   };
   return labels[role] || role;
 }
