@@ -45,6 +45,112 @@ async function pdfPageToImage(pdfData, pageNum = 1) {
 }
 
 /**
+ * Pre-process image for better OCR accuracy
+ * Applies grayscale, contrast enhancement, and binarization
+ */
+async function preprocessImage(imageSource) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Use higher resolution for better OCR
+            const scale = 2;
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+
+            // Draw image scaled up
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Get image data
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            // Step 1: Convert to grayscale
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+            }
+
+            // Step 2: Increase contrast
+            const contrast = 1.5; // Contrast factor
+            const factor = (259 * (contrast * 100 + 255)) / (255 * (259 - contrast * 100));
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = Math.min(255, Math.max(0, factor * (data[i] - 128) + 128));
+                data[i + 1] = Math.min(255, Math.max(0, factor * (data[i + 1] - 128) + 128));
+                data[i + 2] = Math.min(255, Math.max(0, factor * (data[i + 2] - 128) + 128));
+            }
+
+            // Step 3: Adaptive binarization (Otsu's method simplified)
+            // Calculate histogram
+            const histogram = new Array(256).fill(0);
+            for (let i = 0; i < data.length; i += 4) {
+                histogram[Math.floor(data[i])]++;
+            }
+
+            // Find optimal threshold (Otsu)
+            let total = data.length / 4;
+            let sum = 0;
+            for (let i = 0; i < 256; i++) sum += i * histogram[i];
+
+            let sumB = 0, wB = 0, wF = 0;
+            let maxVariance = 0, threshold = 128;
+
+            for (let i = 0; i < 256; i++) {
+                wB += histogram[i];
+                if (wB === 0) continue;
+                wF = total - wB;
+                if (wF === 0) break;
+
+                sumB += i * histogram[i];
+                const mB = sumB / wB;
+                const mF = (sum - sumB) / wF;
+                const variance = wB * wF * (mB - mF) * (mB - mF);
+
+                if (variance > maxVariance) {
+                    maxVariance = variance;
+                    threshold = i;
+                }
+            }
+
+            // Apply threshold
+            for (let i = 0; i < data.length; i += 4) {
+                const val = data[i] > threshold ? 255 : 0;
+                data[i] = val;
+                data[i + 1] = val;
+                data[i + 2] = val;
+            }
+
+            // Put processed image back
+            ctx.putImageData(imageData, 0, 0);
+
+            resolve(canvas);
+        };
+
+        img.onerror = () => {
+            // If image fails to load, return original source
+            resolve(imageSource);
+        };
+
+        // Handle different image source types
+        if (imageSource instanceof HTMLCanvasElement) {
+            img.src = imageSource.toDataURL();
+        } else if (imageSource instanceof File || imageSource instanceof Blob) {
+            img.src = URL.createObjectURL(imageSource);
+        } else if (typeof imageSource === 'string') {
+            img.src = imageSource;
+        } else {
+            resolve(imageSource);
+        }
+    });
+}
+
+/**
  * Process image or PDF file for OCR
  */
 export async function processAttendanceFile(file, onProgress = () => { }) {
@@ -52,7 +158,7 @@ export async function processAttendanceFile(file, onProgress = () => { }) {
 
     try {
         if (file.type === 'application/pdf') {
-            onProgress({ status: 'Convertendo PDF para imagem...', percent: 10 });
+            onProgress({ status: 'Convertendo PDF para imagem...', percent: 5 });
             const arrayBuffer = await file.arrayBuffer();
             const canvas = await pdfPageToImage(new Uint8Array(arrayBuffer));
             imageSource = canvas;
@@ -60,16 +166,25 @@ export async function processAttendanceFile(file, onProgress = () => { }) {
             imageSource = file;
         }
 
+        onProgress({ status: 'Pré-processando imagem...', percent: 10 });
+
+        // Apply image preprocessing for better OCR
+        const processedImage = await preprocessImage(imageSource);
+
         onProgress({ status: 'Iniciando reconhecimento de texto...', percent: 20 });
 
-        // Run OCR with Portuguese language
-        const result = await Tesseract.recognize(imageSource, 'por', {
+        // Run OCR with Portuguese language and optimized settings
+        const result = await Tesseract.recognize(processedImage, 'por', {
             logger: (m) => {
                 if (m.status === 'recognizing text') {
                     const percent = 20 + Math.round(m.progress * 70);
                     onProgress({ status: 'Reconhecendo texto...', percent });
                 }
-            }
+            },
+            // Tesseract configuration for better table/list recognition
+            tessedit_pageseg_mode: '6', // Assume uniform block of text
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÁÉÍÓÚÀÂÊÔÃÕÇáéíóúàâêôãõç0123456789 .-/FP',
+            preserve_interword_spaces: '1',
         });
 
         onProgress({ status: 'Processando resultados...', percent: 95 });
@@ -140,9 +255,26 @@ function parseStudentLine(line) {
     // Clean up the line
     const cleaned = line.trim().replace(/\s+/g, ' ');
 
-    // Try to extract student number and name
-    // Pattern: number number NAME ...
-    const match = cleaned.match(/^(\d+)\s+(\d+)\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇa-záéíóúàâêôãõç\s]+)/i);
+    // Try multiple patterns to extract student data
+    // Pattern 1: ORD NR NAME ... (standard format)
+    let match = cleaned.match(/^(\d+)\s+(\d+)\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇa-záéíóúàâêôãõç\s]+)/i);
+
+    // Pattern 2: Just NR NAME (if ORD is missing or unreadable)
+    if (!match) {
+        match = cleaned.match(/^(\d{3,5})\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ][A-ZÁÉÍÓÚÀÂÊÔÃÕÇa-záéíóúàâêôãõç\s]+)/i);
+        if (match) {
+            // Shift match groups to maintain compatibility
+            match = [match[0], '0', match[1], match[2]];
+        }
+    }
+
+    // Pattern 3: More flexible - any line with a 3-5 digit number followed by text
+    if (!match) {
+        const flexMatch = cleaned.match(/(\d{3,5}).*?([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]{2,})/i);
+        if (flexMatch) {
+            match = [flexMatch[0], '0', flexMatch[1], flexMatch[2]];
+        }
+    }
 
     if (!match) return null;
 
@@ -206,8 +338,18 @@ function extractAttendanceMarks(text) {
 }
 
 /**
- * Calculate total absences for a student
+ * Calculate total absences (DAYS) for a student
+ * 1 day of absence = all 8 periods (formatura + 7 tempos) marked as F
  */
 export function calculateTotalFaltas(tempos) {
+    const totalFs = Object.values(tempos).filter(v => v === 'F').length;
+    // Only count as 1 day if ALL 8 periods are F
+    return totalFs === 8 ? 1 : 0;
+}
+
+/**
+ * Calculate total individual F marks (for display purposes)
+ */
+export function countTotalFs(tempos) {
     return Object.values(tempos).filter(v => v === 'F').length;
 }

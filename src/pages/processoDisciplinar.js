@@ -325,26 +325,44 @@ export async function renderProcessoDisciplinarPage(container) {
                         <span class="stat-value">${fos.length}</span>
                         <span class="stat-label">FOs</span>
                       </div>
-                      <div class="stat">
+                      <div class="stat ${termos.length > 0 ? 'stat--clickable' : ''}" ${termos.length > 0 ? `data-action="view-termos" data-numero="${student.numero}"` : ''}>
                         <span class="stat-value">${termos.length}</span>
                         <span class="stat-label">Termos</span>
                       </div>
-                      ${outrosDocs.length > 0 ? `
-                      <div class="stat">
+                      <div class="stat ${outrosDocs.length > 0 ? 'stat--clickable' : ''}" ${outrosDocs.length > 0 ? `data-action="view-outros" data-numero="${student.numero}"` : ''}>
                         <span class="stat-value">${outrosDocs.length}</span>
                         <span class="stat-label">Outros Doc</span>
                       </div>
-                      ` : ''}
                     </div>
                     
-                    ${termos.length > 0 ? `
-                      <div class="student-card__termos">
-                        ${termos.slice(0, 3).map(t => `
-                          <a href="${t.fileUrl}" target="_blank" class="termo-link" title="${formatDate(t.uploadedAt)}">
-                            ${icons.document}
-                          </a>
-                        `).join('')}
-                        ${termos.length > 3 ? `<span class="termo-more">+${termos.length - 3}</span>` : ''}
+                    ${termos.length > 0 || outrosDocs.length > 0 ? `
+                      <div class="student-card__docs">
+                        ${termos.length > 0 ? `
+                          <div class="docs-section">
+                            <span class="docs-section__label">Termos:</span>
+                            <div class="docs-links">
+                              ${termos.slice(0, 3).map((t, idx) => `
+                                <a href="${t.fileUrl}" target="_blank" class="doc-link doc-link--termo" title="Termo ${idx + 1} - ${t.uploadedAt ? t.uploadedAt.split('T')[0] : ''}">
+                                  ${icons.document} ${idx + 1}
+                                </a>
+                              `).join('')}
+                              ${termos.length > 3 ? `<span class="docs-more" data-action="view-termos" data-numero="${student.numero}">+${termos.length - 3}</span>` : ''}
+                            </div>
+                          </div>
+                        ` : ''}
+                        ${outrosDocs.length > 0 ? `
+                          <div class="docs-section">
+                            <span class="docs-section__label">Outros:</span>
+                            <div class="docs-links">
+                              ${outrosDocs.slice(0, 3).map((d, idx) => `
+                                <a href="${d.fileUrl}" target="_blank" class="doc-link doc-link--outro" title="Doc ${idx + 1} - ${d.uploadedAt ? d.uploadedAt.split('T')[0] : ''}">
+                                  ${icons.document} ${idx + 1}
+                                </a>
+                              `).join('')}
+                              ${outrosDocs.length > 3 ? `<span class="docs-more" data-action="view-outros" data-numero="${student.numero}">+${outrosDocs.length - 3}</span>` : ''}
+                            </div>
+                          </div>
+                        ` : ''}
                       </div>
                     ` : ''}
                     
@@ -440,13 +458,8 @@ export async function renderProcessoDisciplinarPage(container) {
       });
     });
 
-    // Trigger file input on option click
-    document.querySelector('.upload-option:first-child').addEventListener('click', () => {
-      fileInput.click();
-    });
-    document.querySelector('.upload-option:last-child').addEventListener('click', () => {
-      cameraInput.click();
-    });
+    // Note: Os labels já disparam automaticamente o clique no input interno
+    // Não é necessário adicionar event listeners extras nos .upload-option
 
     // Upload confirmation
     confirmBtn.addEventListener('click', uploadTermo);
@@ -986,6 +999,95 @@ const processoStyles = `
   align-items: center;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
+}
+
+/* Clickable stats */
+.stat--clickable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+}
+
+.stat--clickable:hover {
+  background: var(--bg-primary);
+}
+
+/* Documents section */
+.student-card__docs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.docs-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.docs-section__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  min-width: 50px;
+}
+
+.docs-links {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.doc-link svg {
+  width: 12px;
+  height: 12px;
+}
+
+.doc-link--termo {
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+}
+
+.doc-link--termo:hover {
+  background: var(--color-primary-200);
+}
+
+.doc-link--outro {
+  background: var(--color-success-100);
+  color: var(--color-success-700);
+}
+
+.doc-link--outro:hover {
+  background: var(--color-success-200);
+}
+
+.docs-more {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary-600);
+  cursor: pointer;
+  padding: var(--space-1);
+}
+
+.docs-more:hover {
+  text-decoration: underline;
 }
 
 .student-card__actions {

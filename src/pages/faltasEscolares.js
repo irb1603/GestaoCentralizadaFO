@@ -1,509 +1,980 @@
 /**
- * Faltas Escolares Page
+ * Faltas Escolares Page - Manual Entry System
  * Gestão Centralizada FO - CMB
  */
 
 import { db } from '../firebase/config.js';
-import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { getSession } from '../firebase/auth.js';
 import {
-    COLLECTIONS,
-    TEMPOS_AULA,
-    COMPANY_NAMES,
-    formatDate,
-    USER_ROLES
+  COLLECTIONS,
+  COMPANY_NAMES,
+  USER_ROLES
 } from '../constants/index.js';
 import { icons } from '../utils/icons.js';
-import { processAttendanceFile, calculateTotalFaltas } from '../services/ocrService.js';
 import { getStudents } from '../firebase/database.js';
-
-let currentData = {
-    turma: '',
-    data: '',
-    students: []
-};
+import { showToast } from '../utils/toast.js';
 
 let allStudents = [];
 let historyRecords = [];
+let selectedStudents = [];
+
+/**
+ * Format date value to DD/MM/YYYY string
+ * Handles Firestore Timestamp, Date objects, and date strings
+ */
+function formatDateValue(dateVal) {
+  if (!dateVal) return '-';
+
+  let date;
+  if (dateVal.toDate && typeof dateVal.toDate === 'function') {
+    // Firestore Timestamp
+    date = dateVal.toDate();
+  } else if (dateVal instanceof Date) {
+    date = dateVal;
+  } else if (typeof dateVal === 'string') {
+    // String date
+    if (dateVal.includes('-')) {
+      const parts = dateVal.split('-');
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    return dateVal;
+  } else {
+    return '-';
+  }
+
+  // Format Date object to DD/MM/YYYY
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
 
 /**
  * Render Faltas Escolares Page
  */
 export async function renderFaltasEscolaresPage() {
-    const pageContent = document.getElementById('page-content');
-    const session = getSession();
+  const pageContent = document.getElementById('page-content');
+  const session = getSession();
 
-    // Inject styles
-    if (!document.getElementById('faltas-styles')) {
-        const link = document.createElement('link');
-        link.id = 'faltas-styles';
-        link.rel = 'stylesheet';
-        link.href = './src/styles/faltas.css';
-        document.head.appendChild(link);
-    }
+  // Inject styles
+  if (!document.getElementById('faltas-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'faltas-styles';
+    styleEl.textContent = faltasStyles;
+    document.head.appendChild(styleEl);
+  }
 
-    // Load students for reference
-    allStudents = await getStudents();
+  // Load students for reference
+  allStudents = await getStudents();
 
-    pageContent.innerHTML = `
+  // Reset state
+  selectedStudents = [];
+
+  pageContent.innerHTML = `
     <div class="faltas-page">
       <div class="page-header" style="margin-bottom: var(--space-6);">
         <h1 class="page-title">Faltas Escolares</h1>
-        <p class="page-subtitle">Upload de lista de chamada com reconhecimento automático</p>
+        <p class="page-subtitle">Registro manual de faltas do dia inteiro</p>
       </div>
       
-      <!-- Filters -->
-      <div class="faltas-header">
-        <div class="form-group">
-          <label class="form-label">Turma</label>
-          <input type="text" id="input-turma" class="form-input" placeholder="Ex: 201" style="width: 100px;">
-        </div>
-        
-        <div class="form-group">
-          <label class="form-label">Data</label>
-          <input type="date" id="input-data" class="form-input" value="${new Date().toISOString().split('T')[0]}">
-        </div>
-        
-        <button class="btn btn--secondary" id="btn-load-history">
+      <!-- Tabs -->
+      <div class="faltas-tabs">
+        <button class="faltas-tab active" data-tab="registro">
+          ${icons.edit} Registrar Faltas
+        </button>
+        <button class="faltas-tab" data-tab="consulta">
+          ${icons.search} Consultar Período
+        </button>
+        <button class="faltas-tab" data-tab="historico">
           ${icons.clock} Histórico
         </button>
       </div>
       
-      <!-- Upload Zone -->
-      <div class="upload-zone" id="upload-zone">
-        <div class="upload-zone__icon">${icons.upload}</div>
-        <div class="upload-zone__text">Arraste uma imagem ou PDF da lista de chamada</div>
-        <div class="upload-zone__hint">ou clique para selecionar um arquivo</div>
-        <input type="file" id="file-input" accept="image/*,.pdf" style="display: none;">
+      <!-- Tab: Registro de Faltas -->
+      <div id="tab-registro" class="faltas-tab-content active">
+        <div class="card">
+          <div class="card__header">
+            <h3 class="card__title">Novo Registro de Faltas</h3>
+          </div>
+          <div class="card__body">
+            <div class="faltas-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Data</label>
+                  <input type="date" id="input-data" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group" style="flex: 2;">
+                  <label class="form-label">Números dos Alunos (separados por vírgula)</label>
+                  <input type="text" id="input-numeros" class="form-input" placeholder="Ex: 12001, 12002, 12003...">
+                </div>
+              </div>
+              
+              <div id="preview-container" class="preview-container" style="display: none;">
+                <h4>Alunos selecionados:</h4>
+                <div id="preview-list" class="preview-list"></div>
+              </div>
+              
+              <div class="form-actions">
+                <button class="btn btn--ghost" id="btn-limpar">
+                  ${icons.trash} Limpar
+                </button>
+                <button class="btn btn--primary" id="btn-salvar" disabled>
+                  ${icons.check} Salvar Registro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       
-      <!-- Results Container -->
-      <div id="results-container"></div>
+      <!-- Tab: Consulta por Período -->
+      <div id="tab-consulta" class="faltas-tab-content">
+        <div class="card">
+          <div class="card__header">
+            <h3 class="card__title">Consultar Faltas por Período</h3>
+          </div>
+          <div class="card__body">
+            <div class="consulta-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Data Inicial</label>
+                  <input type="date" id="consulta-inicio" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Data Final</label>
+                  <input type="date" id="consulta-fim" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group" style="align-self: flex-end;">
+                  <button class="btn btn--primary" id="btn-consultar">
+                    ${icons.search} Consultar
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div id="consulta-resultado" class="consulta-resultado"></div>
+          </div>
+        </div>
+      </div>
       
-      <!-- History Container -->
-      <div id="history-container" class="history-section" style="display: none;"></div>
-    </div>
-    
-    <!-- Processing Overlay -->
-    <div id="processing-overlay" class="processing-overlay" style="display: none;">
-      <span class="spinner spinner--lg"></span>
-      <div class="processing-overlay__text" id="processing-text">Processando...</div>
-      <div class="processing-overlay__progress">
-        <div class="processing-overlay__bar" id="processing-bar" style="width: 0%;"></div>
+      <!-- Tab: Histórico -->
+      <div id="tab-historico" class="faltas-tab-content">
+        <div id="history-container" class="history-section"></div>
       </div>
     </div>
   `;
 
-    setupEventListeners();
-    loadHistory();
+  setupEventListeners();
+  loadHistory();
+  setDefaultConsultaDates();
 }
 
 /**
  * Setup Event Listeners
  */
 function setupEventListeners() {
-    const uploadZone = document.getElementById('upload-zone');
-    const fileInput = document.getElementById('file-input');
-    const historyBtn = document.getElementById('btn-load-history');
+  // Tab switching
+  document.querySelectorAll('.faltas-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.faltas-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.faltas-tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
 
-    // File input change
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFileUpload(e.target.files[0]);
-        }
+      if (tab.dataset.tab === 'historico') {
+        renderHistory();
+      }
     });
+  });
 
-    // Click on upload zone
-    uploadZone.addEventListener('click', () => fileInput.click());
+  // Number input - real-time parsing
+  const inputNumeros = document.getElementById('input-numeros');
+  let debounceTimer;
+  inputNumeros.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => parseStudentNumbers(), 300);
+  });
 
-    // Drag and drop
-    uploadZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadZone.classList.add('dragover');
-    });
+  // Clear button
+  document.getElementById('btn-limpar').addEventListener('click', () => {
+    selectedStudents = [];
+    document.getElementById('input-numeros').value = '';
+    document.getElementById('preview-container').style.display = 'none';
+    document.getElementById('btn-salvar').disabled = true;
+  });
 
-    uploadZone.addEventListener('dragleave', () => {
-        uploadZone.classList.remove('dragover');
-    });
+  // Save button
+  document.getElementById('btn-salvar').addEventListener('click', saveRecord);
 
-    uploadZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadZone.classList.remove('dragover');
-        if (e.dataTransfer.files.length > 0) {
-            handleFileUpload(e.dataTransfer.files[0]);
-        }
-    });
-
-    // History button
-    historyBtn.addEventListener('click', toggleHistory);
+  // Consulta button
+  document.getElementById('btn-consultar').addEventListener('click', consultarPeriodo);
 }
 
 /**
- * Handle File Upload
+ * Set default consultation dates (last 30 days)
  */
-async function handleFileUpload(file) {
-    const overlay = document.getElementById('processing-overlay');
-    const progressText = document.getElementById('processing-text');
-    const progressBar = document.getElementById('processing-bar');
+function setDefaultConsultaDates() {
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  document.getElementById('consulta-inicio').value = inicioMes.toISOString().split('T')[0];
+}
 
-    overlay.style.display = 'flex';
+/**
+ * Parse student numbers from input
+ */
+function parseStudentNumbers() {
+  const input = document.getElementById('input-numeros').value;
+  const previewContainer = document.getElementById('preview-container');
+  const previewList = document.getElementById('preview-list');
+  const saveBtn = document.getElementById('btn-salvar');
 
-    try {
-        const result = await processAttendanceFile(file, (progress) => {
-            progressText.textContent = progress.status;
-            progressBar.style.width = `${progress.percent}%`;
-        });
+  // Parse numbers from input
+  const numbers = input
+    .split(/[,;\s]+/)
+    .map(n => parseInt(n.trim()))
+    .filter(n => !isNaN(n) && n > 0);
 
-        // Get turma from input or OCR result
-        const turmaInput = document.getElementById('input-turma');
-        currentData.turma = turmaInput.value || result.turma || '';
-        currentData.data = document.getElementById('input-data').value;
-        currentData.students = result.students;
+  // Find matching students
+  selectedStudents = [];
+  const notFound = [];
 
-        // If turma detected by OCR, update input
-        if (result.turma && !turmaInput.value) {
-            turmaInput.value = result.turma;
-        }
-
-        renderResultsTable();
-
-    } catch (error) {
-        console.error('Error processing file:', error);
-        alert('Erro ao processar arquivo: ' + error.message);
-    } finally {
-        overlay.style.display = 'none';
-        progressBar.style.width = '0%';
+  numbers.forEach(num => {
+    const student = allStudents.find(s => s.numero === num);
+    if (student) {
+      if (!selectedStudents.find(s => s.numero === num)) {
+        selectedStudents.push(student);
+      }
+    } else {
+      notFound.push(num);
     }
-}
+  });
 
-/**
- * Render Results Table
- */
-function renderResultsTable() {
-    const container = document.getElementById('results-container');
-    const periods = Object.values(TEMPOS_AULA);
+  // Update preview
+  if (selectedStudents.length > 0 || notFound.length > 0) {
+    previewContainer.style.display = 'block';
 
-    if (currentData.students.length === 0) {
-        container.innerHTML = `
-      <div class="alert alert--warning">
-        <div class="alert__icon">${icons.warning}</div>
-        <div class="alert__content">
-          <p>Nenhum aluno foi reconhecido na imagem. Verifique se a imagem está nítida e tente novamente.</p>
-        </div>
-      </div>
-    `;
-        return;
+    let html = '';
+
+    if (selectedStudents.length > 0) {
+      html += `<div class="preview-found">`;
+      html += selectedStudents.map(s => `
+                <div class="preview-student">
+                    <span class="preview-student__number">${s.numero}</span>
+                    <span class="preview-student__name">${s.nome || s.nomeGuerra || 'N/A'}</span>
+                    <span class="preview-student__turma">Turma ${s.turma || '-'}</span>
+                </div>
+            `).join('');
+      html += `</div>`;
     }
 
-    container.innerHTML = `
-    <div class="card" style="margin-bottom: var(--space-6);">
-      <div class="card__header">
-        <h3 class="card__title">Resultado do Reconhecimento</h3>
-        <span class="badge badge--info">${currentData.students.length} alunos</span>
-      </div>
-      <div class="card__body">
-        <p class="text-sm text-secondary" style="margin-bottom: var(--space-4);">
-          Clique nas células para alternar entre Presença (P) e Falta (F). Marque a caixa "Justificada" se a falta foi justificada.
-        </p>
-        
-        <div class="attendance-table-wrapper">
-          <table class="attendance-table">
-            <thead>
-              <tr>
-                <th style="width: 50px;">Nº</th>
-                <th style="text-align: left;">Nome</th>
-                ${periods.map(p => `<th class="tempo-col">${p.label.replace(' Tempo', 'T').replace('Formatura', 'Form')}</th>`).join('')}
-                <th style="width: 70px;">Total</th>
-                <th style="width: 80px;">Justif.</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${currentData.students.map((student, idx) => renderStudentRow(student, idx)).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    
-    <div class="faltas-actions">
-      <button class="btn btn--ghost" id="btn-clear">
-        ${icons.trash} Limpar
-      </button>
-      <button class="btn btn--primary" id="btn-save">
-        ${icons.check} Salvar Registro
-      </button>
-    </div>
-  `;
+    if (notFound.length > 0) {
+      html += `<div class="preview-notfound">
+                <span class="preview-notfound__label">${icons.warning} Não encontrados:</span>
+                <span>${notFound.join(', ')}</span>
+            </div>`;
+    }
 
-    // Setup cell click handlers
-    setupTableInteractions();
+    previewList.innerHTML = html;
+    saveBtn.disabled = selectedStudents.length === 0;
+  } else {
+    previewContainer.style.display = 'none';
+    saveBtn.disabled = true;
+  }
 }
 
 /**
- * Render Student Row
- */
-function renderStudentRow(student, index) {
-    const periods = Object.values(TEMPOS_AULA);
-    const totalFaltas = calculateTotalFaltas(student.tempos);
-
-    let totalClass = 'total-faltas--zero';
-    if (totalFaltas > 0 && totalFaltas <= 3) totalClass = 'total-faltas--low';
-    if (totalFaltas > 3) totalClass = 'total-faltas--high';
-
-    return `
-    <tr data-index="${index}">
-      <td class="student-number">${student.numero}</td>
-      <td class="student-name">${student.nomeGuerra}</td>
-      ${periods.map(p => {
-        const value = student.tempos[p.key];
-        const cellClass = value === 'F' ? 'attendance-cell--absent' : 'attendance-cell--present';
-        return `
-          <td>
-            <div class="attendance-cell ${cellClass}" data-period="${p.key}" data-index="${index}">
-              ${value}
-            </div>
-          </td>
-        `;
-    }).join('')}
-      <td>
-        <span class="total-faltas ${totalClass}" data-index="${index}">${totalFaltas}</span>
-      </td>
-      <td>
-        <div class="justified-toggle">
-          <input type="checkbox" ${student.justificada ? 'checked' : ''} data-index="${index}" class="justified-checkbox">
-        </div>
-      </td>
-    </tr>
-  `;
-}
-
-/**
- * Setup Table Interactions
- */
-function setupTableInteractions() {
-    // Attendance cell clicks
-    document.querySelectorAll('.attendance-cell').forEach(cell => {
-        cell.addEventListener('click', () => {
-            const index = parseInt(cell.dataset.index);
-            const period = cell.dataset.period;
-
-            // Toggle P/F
-            const currentValue = currentData.students[index].tempos[period];
-            const newValue = currentValue === 'P' ? 'F' : 'P';
-            currentData.students[index].tempos[period] = newValue;
-
-            // Update cell
-            cell.textContent = newValue;
-            cell.classList.toggle('attendance-cell--present', newValue === 'P');
-            cell.classList.toggle('attendance-cell--absent', newValue === 'F');
-
-            // Update total
-            updateStudentTotal(index);
-        });
-    });
-
-    // Justified checkboxes
-    document.querySelectorAll('.justified-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-            const index = parseInt(checkbox.dataset.index);
-            currentData.students[index].justificada = checkbox.checked;
-        });
-    });
-
-    // Save button
-    document.getElementById('btn-save').addEventListener('click', saveRecord);
-
-    // Clear button
-    document.getElementById('btn-clear').addEventListener('click', () => {
-        currentData.students = [];
-        document.getElementById('results-container').innerHTML = '';
-    });
-}
-
-/**
- * Update Student Total
- */
-function updateStudentTotal(index) {
-    const totalFaltas = calculateTotalFaltas(currentData.students[index].tempos);
-    const totalSpan = document.querySelector(`.total-faltas[data-index="${index}"]`);
-
-    totalSpan.textContent = totalFaltas;
-    totalSpan.className = 'total-faltas';
-
-    if (totalFaltas === 0) totalSpan.classList.add('total-faltas--zero');
-    else if (totalFaltas <= 3) totalSpan.classList.add('total-faltas--low');
-    else totalSpan.classList.add('total-faltas--high');
-}
-
-/**
- * Save Record to Firestore
+ * Save attendance record
  */
 async function saveRecord() {
-    const turma = document.getElementById('input-turma').value;
-    const data = document.getElementById('input-data').value;
+  const data = document.getElementById('input-data').value;
 
-    if (!turma) {
-        alert('Por favor, informe a turma.');
-        return;
-    }
+  if (!data) {
+    showToast('Por favor, informe a data.', 'warning');
+    return;
+  }
 
-    if (!data) {
-        alert('Por favor, informe a data.');
-        return;
-    }
+  if (selectedStudents.length === 0) {
+    showToast('Nenhum aluno selecionado.', 'warning');
+    return;
+  }
 
-    if (currentData.students.length === 0) {
-        alert('Nenhum aluno para salvar.');
-        return;
-    }
+  const session = getSession();
+  const saveBtn = document.getElementById('btn-salvar');
 
-    const session = getSession();
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner"></span> Salvando...';
 
-    try {
-        const record = {
-            turma,
-            data: new Date(data + 'T12:00:00'),
-            company: session.company || null,
-            registradoPor: session.username,
-            createdAt: serverTimestamp(),
-            alunos: currentData.students.map(s => ({
-                numero: s.numero,
-                nomeGuerra: s.nomeGuerra,
-                tempos: s.tempos,
-                totalFaltas: calculateTotalFaltas(s.tempos),
-                justificada: s.justificada
-            }))
-        };
+  try {
+    const record = {
+      data: Timestamp.fromDate(new Date(data + 'T12:00:00')),
+      company: session.company || null,
+      registradoPor: session.username,
+      createdAt: serverTimestamp(),
+      alunos: selectedStudents.map(s => ({
+        numero: s.numero,
+        nome: s.nome || s.nomeGuerra || '',
+        turma: s.turma || '',
+        justificada: false
+      }))
+    };
 
-        await addDoc(collection(db, COLLECTIONS.FALTAS), record);
+    await addDoc(collection(db, COLLECTIONS.FALTAS), record);
 
-        alert('Registro salvo com sucesso!');
-        currentData.students = [];
-        document.getElementById('results-container').innerHTML = '';
-        loadHistory();
+    showToast(`Registro salvo com ${selectedStudents.length} aluno(s)!`, 'success');
 
-    } catch (error) {
-        console.error('Error saving record:', error);
-        alert('Erro ao salvar: ' + error.message);
-    }
+    // Reset form
+    selectedStudents = [];
+    document.getElementById('input-numeros').value = '';
+    document.getElementById('preview-container').style.display = 'none';
+
+    // Reload history
+    await loadHistory();
+
+  } catch (error) {
+    console.error('Error saving record:', error);
+    showToast('Erro ao salvar: ' + error.message, 'error');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = `${icons.check} Salvar Registro`;
+  }
 }
 
 /**
  * Load History
  */
 async function loadHistory() {
-    try {
-        const session = getSession();
-        let q;
+  try {
+    const session = getSession();
+    let q;
 
-        if (session.role === USER_ROLES.COMMANDER && session.company) {
-            q = query(
-                collection(db, COLLECTIONS.FALTAS),
-                where('company', '==', session.company),
-                orderBy('data', 'desc')
-            );
-        } else {
-            q = query(
-                collection(db, COLLECTIONS.FALTAS),
-                orderBy('data', 'desc')
-            );
-        }
-
-        const snapshot = await getDocs(q);
-        historyRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    } catch (error) {
-        console.error('Error loading history:', error);
-    }
-}
-
-/**
- * Toggle History View
- */
-function toggleHistory() {
-    const container = document.getElementById('history-container');
-
-    if (container.style.display === 'none') {
-        container.style.display = 'block';
-        renderHistory();
+    // Simple query without orderBy to avoid index requirements
+    if (session.role === USER_ROLES.COMMANDER && session.company) {
+      q = query(
+        collection(db, COLLECTIONS.FALTAS),
+        where('company', '==', session.company)
+      );
     } else {
-        container.style.display = 'none';
+      q = query(collection(db, COLLECTIONS.FALTAS));
     }
+
+    const snapshot = await getDocs(q);
+    historyRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Sort on client side by date descending
+    historyRecords.sort((a, b) => {
+      const dateA = a.data?.toDate ? a.data.toDate() : new Date(a.data);
+      const dateB = b.data?.toDate ? b.data.toDate() : new Date(b.data);
+      return dateB - dateA;
+    });
+
+  } catch (error) {
+    console.error('Error loading history:', error);
+    showToast('Erro ao carregar histórico: ' + error.message, 'error');
+  }
 }
 
 /**
  * Render History
  */
 function renderHistory() {
-    const container = document.getElementById('history-container');
+  const container = document.getElementById('history-container');
 
-    if (historyRecords.length === 0) {
-        container.innerHTML = `
-      <h3 style="margin-bottom: var(--space-4);">Histórico de Registros</h3>
-      <p class="text-secondary">Nenhum registro encontrado.</p>
-    `;
-        return;
-    }
-
+  if (historyRecords.length === 0) {
     container.innerHTML = `
-    <h3 style="margin-bottom: var(--space-4);">Histórico de Registros</h3>
+      <div class="card">
+        <div class="card__body">
+          <p class="text-secondary" style="text-align: center;">Nenhum registro encontrado.</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
     <div class="history-list">
       ${historyRecords.map(record => {
-        const totalAlunos = record.alunos?.length || 0;
-        const totalFaltas = record.alunos?.reduce((sum, a) => sum + (a.totalFaltas || 0), 0) || 0;
-        const dataStr = record.data?.toDate ? formatDate(record.data.toDate()) : record.data;
+    const totalAlunos = record.alunos?.length || 0;
+    const dataStr = formatDateValue(record.data);
 
-        return `
+    return `
           <div class="history-card" data-id="${record.id}">
-            <div class="history-card__date">${dataStr}</div>
-            <div class="history-card__turma">Turma ${record.turma}</div>
-            <div class="history-card__stats">
-              <span class="history-card__stat">
-                ${icons.users} ${totalAlunos} alunos
-              </span>
-              <span class="history-card__stat" style="color: var(--color-danger-500);">
-                ${icons.close} ${totalFaltas} faltas
-              </span>
+            <div class="history-card__main">
+              <div class="history-card__date">${dataStr}</div>
+              <div class="history-card__info">
+                <span class="history-card__stat">
+                  ${icons.users} ${totalAlunos} aluno${totalAlunos !== 1 ? 's' : ''} com falta
+                </span>
+              </div>
             </div>
+            <button class="btn btn--ghost btn--sm btn-expand" data-id="${record.id}">
+              ${icons.chevronRight} Detalhes
+            </button>
+          </div>
+          <div class="history-detail" id="detail-${record.id}" style="display: none;">
+            ${renderHistoryDetail(record)}
           </div>
         `;
-    }).join('')}
+  }).join('')}
     </div>
   `;
 
-    // Add click handlers for history cards
-    container.querySelectorAll('.history-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const recordId = card.dataset.id;
-            viewHistoryRecord(recordId);
-        });
+  // Add expand button handlers
+  container.querySelectorAll('.btn-expand').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const detail = document.getElementById(`detail-${btn.dataset.id}`);
+      const isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : 'block';
+      btn.innerHTML = isOpen ? `${icons.chevronRight} Detalhes` : `${icons.chevronDown} Ocultar`;
     });
+  });
+
+  // Add justify checkbox handlers
+  container.querySelectorAll('.justify-checkbox').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const recordId = cb.dataset.record;
+      const studentNum = parseInt(cb.dataset.student);
+      const justified = cb.checked;
+
+      await updateJustification(recordId, studentNum, justified);
+    });
+  });
 }
 
 /**
- * View History Record
+ * Render history detail for a record
  */
-function viewHistoryRecord(recordId) {
+function renderHistoryDetail(record) {
+  if (!record.alunos || record.alunos.length === 0) {
+    return '<p class="text-secondary">Nenhum aluno neste registro.</p>';
+  }
+
+  return `
+    <table class="detail-table">
+      <thead>
+        <tr>
+          <th>Número</th>
+          <th>Nome</th>
+          <th>Turma</th>
+          <th>Justificada</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${record.alunos.map(a => `
+          <tr>
+            <td>${a.numero}</td>
+            <td>${a.nome || '-'}</td>
+            <td>${a.turma || '-'}</td>
+            <td>
+              <label class="justify-toggle">
+                <input type="checkbox" class="justify-checkbox" 
+                       data-record="${record.id}" 
+                       data-student="${a.numero}"
+                       ${a.justificada ? 'checked' : ''}>
+                <span class="justify-toggle__indicator"></span>
+              </label>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+/**
+ * Update justification for a student in a record
+ */
+async function updateJustification(recordId, studentNumber, justified) {
+  try {
     const record = historyRecords.find(r => r.id === recordId);
     if (!record) return;
 
-    // Populate current data
-    document.getElementById('input-turma').value = record.turma;
+    const alunos = record.alunos.map(a => {
+      if (a.numero === studentNumber) {
+        return { ...a, justificada: justified };
+      }
+      return a;
+    });
 
-    const dataValue = record.data?.toDate ? record.data.toDate().toISOString().split('T')[0] : record.data;
-    document.getElementById('input-data').value = dataValue;
+    await updateDoc(doc(db, COLLECTIONS.FALTAS, recordId), { alunos });
 
-    currentData.turma = record.turma;
-    currentData.data = dataValue;
-    currentData.students = record.alunos.map(a => ({
-        numero: a.numero,
-        nomeGuerra: a.nomeGuerra,
-        tempos: a.tempos,
-        justificada: a.justificada
-    }));
+    // Update local cache
+    record.alunos = alunos;
 
-    renderResultsTable();
+    showToast(justified ? 'Falta justificada!' : 'Justificativa removida.', 'success');
 
-    // Hide history
-    document.getElementById('history-container').style.display = 'none';
+  } catch (error) {
+    console.error('Error updating justification:', error);
+    showToast('Erro ao atualizar: ' + error.message, 'error');
+  }
 }
+
+/**
+ * Consult absences by period
+ */
+async function consultarPeriodo() {
+  const inicio = document.getElementById('consulta-inicio').value;
+  const fim = document.getElementById('consulta-fim').value;
+  const container = document.getElementById('consulta-resultado');
+
+  if (!inicio || !fim) {
+    showToast('Selecione as datas de início e fim.', 'warning');
+    return;
+  }
+
+  container.innerHTML = '<div class="loading"><span class="spinner"></span> Consultando...</div>';
+
+  try {
+    const session = getSession();
+    const startDate = new Date(inicio + 'T00:00:00');
+    const endDate = new Date(fim + 'T23:59:59');
+
+    // Simple query without multiple where clauses to avoid index requirements
+    let q;
+    if (session.role === USER_ROLES.COMMANDER && session.company) {
+      q = query(
+        collection(db, COLLECTIONS.FALTAS),
+        where('company', '==', session.company)
+      );
+    } else {
+      q = query(collection(db, COLLECTIONS.FALTAS));
+    }
+
+    const snapshot = await getDocs(q);
+    let records = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Filter by date on client side
+    records = records.filter(record => {
+      const recordDate = record.data?.toDate ? record.data.toDate() : new Date(record.data);
+      return recordDate >= startDate && recordDate <= endDate;
+    });
+
+    // Aggregate absences by student
+    const studentAbsences = {};
+
+    records.forEach(record => {
+      (record.alunos || []).forEach(aluno => {
+        if (!studentAbsences[aluno.numero]) {
+          studentAbsences[aluno.numero] = {
+            numero: aluno.numero,
+            nome: aluno.nome || '',
+            turma: aluno.turma || '',
+            totalFaltas: 0,
+            faltasJustificadas: 0,
+            datas: []
+          };
+        }
+        studentAbsences[aluno.numero].totalFaltas++;
+        if (aluno.justificada) {
+          studentAbsences[aluno.numero].faltasJustificadas++;
+        }
+        const dataStr = formatDateValue(record.data);
+        studentAbsences[aluno.numero].datas.push({
+          data: dataStr,
+          justificada: aluno.justificada
+        });
+      });
+    });
+
+    // Convert to array and sort by total absences
+    const sortedStudents = Object.values(studentAbsences)
+      .sort((a, b) => b.totalFaltas - a.totalFaltas);
+
+    if (sortedStudents.length === 0) {
+      container.innerHTML = `
+        <div class="alert alert--info">
+          <div class="alert__icon">${icons.info}</div>
+          <div class="alert__content">
+            <p>Nenhuma falta registrada no período selecionado.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="consulta-summary">
+        <div class="summary-stat">
+          <span class="summary-stat__value">${sortedStudents.length}</span>
+          <span class="summary-stat__label">Alunos</span>
+        </div>
+        <div class="summary-stat">
+          <span class="summary-stat__value">${sortedStudents.reduce((sum, s) => sum + s.totalFaltas, 0)}</span>
+          <span class="summary-stat__label">Total de Faltas</span>
+        </div>
+        <div class="summary-stat summary-stat--danger">
+          <span class="summary-stat__value">${sortedStudents.filter(s => s.totalFaltas >= 10).length}</span>
+          <span class="summary-stat__label">Com 10+ Faltas</span>
+        </div>
+      </div>
+      
+      <table class="consulta-table">
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Nome</th>
+            <th>Turma</th>
+            <th>Faltas</th>
+            <th>Justificadas</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sortedStudents.map(s => {
+      const isHighRisk = s.totalFaltas >= 10;
+      return `
+              <tr class="${isHighRisk ? 'high-risk' : ''}">
+                <td>${s.numero}</td>
+                <td class="${isHighRisk ? 'text-danger' : ''}">${s.nome || '-'}</td>
+                <td>${s.turma || '-'}</td>
+                <td><strong>${s.totalFaltas}</strong></td>
+                <td>${s.faltasJustificadas}</td>
+              </tr>
+            `;
+    }).join('')}
+        </tbody>
+      </table>
+    `;
+
+  } catch (error) {
+    console.error('Error consulting period:', error);
+    container.innerHTML = `
+      <div class="alert alert--danger">
+        <div class="alert__icon">${icons.warning}</div>
+        <div class="alert__content">
+          <p>Erro ao consultar: ${error.message}</p>
+        </div>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Styles
+ */
+const faltasStyles = `
+  .faltas-page {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  
+  .faltas-tabs {
+    display: flex;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-light);
+    padding-bottom: var(--space-2);
+  }
+  
+  .faltas-tab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: all 0.2s;
+  }
+  
+  .faltas-tab:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+  
+  .faltas-tab.active {
+    background: var(--color-primary-100);
+    color: var(--color-primary-600);
+  }
+  
+  .faltas-tab-content {
+    display: none;
+  }
+  
+  .faltas-tab-content.active {
+    display: block;
+  }
+  
+  .faltas-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  
+  .form-row {
+    display: flex;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+  
+  .form-row .form-group {
+    flex: 1;
+    min-width: 150px;
+  }
+  
+  .preview-container {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+  }
+  
+  .preview-container h4 {
+    margin: 0 0 var(--space-3) 0;
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+  
+  .preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .preview-found {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  
+  .preview-student {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+  }
+  
+  .preview-student__number {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-primary-600);
+  }
+  
+  .preview-student__name {
+    color: var(--text-primary);
+  }
+  
+  .preview-student__turma {
+    font-size: var(--text-xs);
+    color: var(--text-tertiary);
+  }
+  
+  .preview-notfound {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-warning-50);
+    border-radius: var(--radius-sm);
+    color: var(--color-warning-700);
+    font-size: var(--text-sm);
+  }
+  
+  .preview-notfound__label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-weight: var(--font-weight-medium);
+  }
+  
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-light);
+  }
+  
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .history-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+  }
+  
+  .history-card__main {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+  
+  .history-card__date {
+    font-weight: var(--font-weight-bold);
+    color: var(--text-primary);
+  }
+  
+  .history-card__info {
+    display: flex;
+    gap: var(--space-3);
+  }
+  
+  .history-card__stat {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+  
+  .history-detail {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    padding: var(--space-4);
+    margin-top: -2px;
+  }
+  
+  .detail-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .detail-table th,
+  .detail-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .detail-table th {
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+  
+  .justify-toggle {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+  }
+  
+  .justify-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .justify-toggle__indicator {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--border-medium);
+    transition: 0.3s;
+    border-radius: 22px;
+  }
+  
+  .justify-toggle__indicator:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+  }
+  
+  .justify-toggle input:checked + .justify-toggle__indicator {
+    background-color: var(--color-success-500);
+  }
+  
+  .justify-toggle input:checked + .justify-toggle__indicator:before {
+    transform: translateX(18px);
+  }
+  
+  .consulta-form {
+    margin-bottom: var(--space-4);
+  }
+  
+  .consulta-summary {
+    display: flex;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+    padding: var(--space-4);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+  }
+  
+  .summary-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+  }
+  
+  .summary-stat__value {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--text-primary);
+  }
+  
+  .summary-stat__label {
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+  }
+  
+  .summary-stat--danger .summary-stat__value {
+    color: var(--color-danger-500);
+  }
+  
+  .consulta-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .consulta-table th,
+  .consulta-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .consulta-table th {
+    font-size: var(--text-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    background: var(--bg-secondary);
+  }
+  
+  .consulta-table tr.high-risk {
+    background: var(--color-danger-50);
+  }
+  
+  .text-danger {
+    color: var(--color-danger-600) !important;
+    font-weight: var(--font-weight-bold);
+  }
+  
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-6);
+    color: var(--text-secondary);
+  }
+`;
