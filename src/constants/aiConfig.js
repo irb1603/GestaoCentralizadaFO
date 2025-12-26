@@ -1,0 +1,61 @@
+// AI Configuration - API Keys and Settings
+// Gestão Centralizada FO - CMB
+
+/**
+ * Default Gemini Model to use
+ * gemini-2.5-flash-lite is recommended for free tier (1000 req/day)
+ */
+export const DEFAULT_AI_MODEL = 'gemini-2.0-flash-lite';
+
+/**
+ * AI Configuration per company
+ * API keys should be stored in Firebase for security
+ * This is the fallback/reference structure
+ */
+export const AI_CONFIG = {
+    models: {
+        'gemini-2.0-flash-lite': {
+            name: 'Gemini 2.0 Flash Lite',
+            freeLimit: { rpd: 1000, rpm: 30 },
+            pricing: { input: 0.10, output: 0.40 } // per million tokens
+        },
+        'gemini-2.0-flash': {
+            name: 'Gemini 2.0 Flash',
+            freeLimit: { rpd: 20, rpm: 2 },
+            pricing: { input: 0.30, output: 2.50 }
+        }
+    },
+
+    // Company to API key mapping (keys stored in Firebase)
+    companyKeyMapping: {
+        'admin': 'admin',
+        'comandoCA': 'admin',
+        '6cia': '6cia',
+        '7cia': '7cia',
+        '8cia': '8cia',
+        '9cia': '9cia',
+        '1cia': '1cia',
+        '2cia': '2cia',
+        '3cia': '3cia'
+    }
+};
+
+/**
+ * Firebase collection for AI configurations
+ */
+export const AI_CONFIGS_COLLECTION = 'aiConfigs';
+
+/**
+ * Firebase collection for AI conversation logs
+ */
+export const AI_LOGS_COLLECTION = 'aiConversations';
+
+/**
+ * Default system prompt context limit (days)
+ */
+export const AI_CONTEXT_DAYS = 30;
+
+/**
+ * Maximum tokens for context
+ */
+export const AI_MAX_CONTEXT_TOKENS = 8000;

@@ -51,5 +51,7 @@ Thumbs.db
 # Scripts with sensitive data
 scripts/*.js
 !scripts/*.example.js
+scripts/*.mjs
+!scripts/*.example.mjs
 src/scripts/*.mjs
 !src/scripts/*.example.mjs

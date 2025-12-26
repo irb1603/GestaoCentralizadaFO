@@ -5,12 +5,14 @@ import { isAuthenticated, getSession } from './firebase/auth.js';
 import { renderLoginPage } from './pages/login.js';
 import { renderSidebar, setupSidebarEvents } from './components/sidebar.js';
 import { renderHeader, setupHeaderEvents } from './components/header.js';
+import { initAIChat, destroyAIChat } from './components/aiChat.js';
 import { ROUTES, PAGE_TITLES, FO_STATUS } from './constants/index.js';
 
 // Initialize application
 async function init() {
   // Check authentication
   if (!isAuthenticated()) {
+    destroyAIChat(); // Remove AI chat if logging out
     renderLoginPage();
     return;
   }
@@ -28,6 +30,9 @@ async function init() {
   // Setup event listeners
   setupSidebarEvents();
   setupHeaderEvents();
+
+  // Initialize AI Chat (only for logged in users)
+  initAIChat();
 }
 
 // Render main layout with sidebar and header

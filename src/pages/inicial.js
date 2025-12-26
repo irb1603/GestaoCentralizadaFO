@@ -20,7 +20,7 @@ import {
   formatDate,
   getWhatsAppLink
 } from '../constants/index.js';
-import { renderExpandableCard, expandableCardStyles, setupAutocomplete, setupQuantidadeDias } from '../components/expandableCard.js';
+import { renderExpandableCard, expandableCardStyles, setupAutocomplete, setupQuantidadeDias, setupAISuggestion } from '../components/expandableCard.js';
 import { renderActionModals, actionButtonsStyles, setupActionButtons } from '../components/actionModals.js';
 import { icons } from '../utils/icons.js';
 import { logAction } from '../services/auditLogger.js';
@@ -239,6 +239,9 @@ async function loadPendingFOs(searchTerm = '', tipoFilter = '') {
 
     // Setup autocomplete for RICM fields
     setupAutocomplete();
+
+    // Setup AI suggestion buttons
+    setupAISuggestion();
 
     // Setup quantity days dynamic fields
     setupQuantidadeDias();

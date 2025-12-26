@@ -198,7 +198,18 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false, o
         
         <!-- Enquadramento (Autocomplete) -->
         <div class="expandable-card__section">
-          <h4 class="expandable-card__section-title">Enquadramento (Faltas Disciplinares)</h4>
+          <div class="expandable-card__section-header">
+            <h4 class="expandable-card__section-title" style="margin-bottom: 0;">Enquadramento (Faltas Disciplinares)</h4>
+            ${!readOnly ? `
+              <button type="button" class="btn btn--ghost btn--sm ai-suggest-btn" 
+                      data-action="ai-suggest" 
+                      data-card-id="${cardId}"
+                      data-description="${(fo.descricao || '').replace(/"/g, '&quot;')}"
+                      title="Sugestão de IA para Enquadramento, Atenuantes e Agravantes">
+                ${icons.bot || '🤖'} Sugerir
+              </button>
+            ` : ''}
+          </div>
           <div class="autocomplete-container" data-type="enquadramento" data-card-id="${cardId}">
             <div class="autocomplete-input-wrapper">
               <input type="text" class="form-input autocomplete-input" 
@@ -213,6 +224,10 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false, o
             <div class="autocomplete-selected" data-field="enquadramento" data-value="${fo.enquadramento || ''}">
               ${renderSelectedItems(fo.enquadramento, FALTAS_DISCIPLINARES)}
             </div>
+          </div>
+          <!-- AI Suggestion Result -->
+          <div class="ai-suggestion-result hidden" id="${cardId}-ai-result">
+            <div class="ai-suggestion-content"></div>
           </div>
         </div>
         
@@ -602,6 +617,109 @@ function renderDatasCumprimentoInternal(datasArray, numDias, enabled) {
 }
 
 /**
+ * Setup AI Suggestion buttons
+ */
+export function setupAISuggestion() {
+  document.querySelectorAll('.ai-suggest-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const cardId = btn.dataset.cardId;
+      const description = btn.dataset.description;
+      const resultContainer = document.getElementById(`${cardId}-ai-result`);
+      const contentDiv = resultContainer?.querySelector('.ai-suggestion-content');
+
+      if (!resultContainer || !contentDiv) return;
+
+      // Show loading
+      resultContainer.classList.remove('hidden');
+      contentDiv.innerHTML = `
+        <div class="ai-suggestion-loading">
+          <span class="spinner"></span>
+          <span>Analisando descrição com IA...</span>
+        </div>
+      `;
+
+      btn.disabled = true;
+
+      try {
+        // Dynamically import AI service
+        const { chatWithAI, isAIConfigured } = await import('../services/aiService.js');
+
+        // Check if AI is configured
+        const configured = await isAIConfigured();
+        if (!configured) {
+          contentDiv.innerHTML = `
+            <p style="color: var(--color-warning-700);">
+              ⚠️ O assistente de IA não está configurado. 
+              Solicite ao administrador que configure a API key do Gemini na página Admin.
+            </p>
+          `;
+          return;
+        }
+
+        if (!description || description.trim() === '') {
+          contentDiv.innerHTML = `
+            <p style="color: var(--color-warning-700);">
+              ⚠️ A descrição do fato está vazia. Preencha a descrição para obter sugestões.
+            </p>
+          `;
+          return;
+        }
+
+        // Create specific prompt for enquadramento suggestion
+        const prompt = `Com base na seguinte descrição de um fato observado, sugira:
+1. O número do enquadramento (falta disciplinar) mais adequado do RICM
+2. Possíveis agravantes aplicáveis
+3. Possíveis atenuantes aplicáveis
+4. Classificação provável da falta (leve/média/grave)
+
+Descrição do fato: "${description}"
+
+Responda de forma concisa e direta, citando os números dos artigos.`;
+
+        const response = await chatWithAI(prompt);
+
+        // Format and display response
+        contentDiv.innerHTML = formatAISuggestionResponse(response);
+
+      } catch (error) {
+        console.error('AI Suggestion Error:', error);
+        contentDiv.innerHTML = `
+          <p style="color: var(--color-danger-700);">
+            ❌ Erro ao obter sugestão: ${error.message}
+          </p>
+        `;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+/**
+ * Format AI response for display
+ */
+function formatAISuggestionResponse(text) {
+  // Basic formatting
+  let formatted = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>')
+    .replace(/^\d+\.\s/gm, '<br><strong>•</strong> ');
+
+  return `
+    <div style="margin-bottom: var(--space-2);">
+      <strong style="color: var(--color-primary-700);">🤖 Sugestão da IA:</strong>
+    </div>
+    <div>${formatted}</div>
+    <div style="margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--text-tertiary);">
+      <em>Esta é apenas uma sugestão. Confirme os artigos no RICM.</em>
+    </div>
+  `;
+}
+
+/**
  * CSS for expandable cards
  */
 export const expandableCardStyles = `
@@ -702,6 +820,57 @@ export const expandableCardStyles = `
   margin-bottom: var(--space-3);
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border-light);
+}
+
+.expandable-card__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.ai-suggest-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-primary-600);
+  font-size: var(--font-size-xs);
+  text-transform: none;
+}
+
+.ai-suggest-btn:hover {
+  background: var(--color-primary-50);
+}
+
+.ai-suggestion-result {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: linear-gradient(135deg, var(--color-primary-50), var(--bg-secondary));
+  border: 1px solid var(--color-primary-200);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+}
+
+.ai-suggestion-result.hidden {
+  display: none;
+}
+
+.ai-suggestion-content {
+  line-height: 1.6;
+}
+
+.ai-suggestion-content strong {
+  color: var(--color-primary-700);
+}
+
+.ai-suggestion-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
 }
 
 .expandable-card__grid {

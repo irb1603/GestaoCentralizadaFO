@@ -47,6 +47,7 @@ export async function renderAdminPage() {
       <button class="admin-tab active" data-tab="sistema">Usuários do Sistema</button>
       <button class="admin-tab" data-tab="registradores">Registradores de FO</button>
       <button class="admin-tab" data-tab="alunos">Dados dos Alunos</button>
+      <button class="admin-tab" data-tab="ia">Assistente IA</button>
     </div>
     
     <!-- Tab Content: Sistema -->
@@ -367,6 +368,52 @@ export async function renderAdminPage() {
       </div>
     </div>
     
+    <!-- Tab Content: IA -->
+    <div class="admin-tab-content" id="tab-ia">
+      <div class="card">
+        <div class="card__header">
+          <h3 class="card__title">Configuração do Assistente de IA</h3>
+        </div>
+        <div class="card__body">
+          <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
+            Configure as API keys do Google Gemini para cada companhia. Cada companhia usa sua própria API key para distribuir o uso do tier gratuito.
+          </p>
+          
+          <div class="alert alert--info" style="margin-bottom: var(--space-4);">
+            <div class="alert__icon">${icons.info}</div>
+            <div class="alert__content">
+              <p><strong>Tier Gratuito:</strong> Gemini 2.5 Flash-Lite oferece 1.000 requisições/dia por API key.</p>
+              <p>Obtenha sua API key em: <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a></p>
+            </div>
+          </div>
+          
+          <div id="ai-configs-container">
+            <div style="display: flex; justify-content: center; padding: var(--space-6);">
+              <span class="spinner spinner--lg"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- AI Logs -->
+      <div class="card" style="margin-top: var(--space-6);">
+        <div class="card__header">
+          <h3 class="card__title">Histórico de Conversas com IA</h3>
+        </div>
+        <div class="card__body">
+          <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
+            Veja as últimas conversas dos usuários com o assistente de IA.
+          </p>
+          
+          <div id="ai-logs-container">
+            <button class="btn btn--secondary" id="load-ai-logs-btn">
+              ${icons.refresh} Carregar Histórico
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <style>
       .admin-tabs {
         display: flex;
@@ -513,6 +560,9 @@ function setupAdminEvents() {
 
   // Bulk Delete setup
   setupBulkDelete();
+
+  // AI Config setup
+  setupAIConfig();
 }
 
 async function loadRegistradores() {
@@ -1233,3 +1283,259 @@ function updateSelectedCount() {
 // Make updateSelectedCount globally accessible
 window.updateSelectedCount = updateSelectedCount;
 
+// AI Configuration
+const AI_COMPANIES = [
+  { id: 'admin', label: 'Admin / Comando CA' },
+  { id: '6cia', label: '6ª Companhia (6º Ano)' },
+  { id: '7cia', label: '7ª Companhia (7º Ano)' },
+  { id: '8cia', label: '8ª Companhia (8º Ano)' },
+  { id: '9cia', label: '9ª Companhia (9º Ano)' },
+  { id: '1cia', label: '1ª Companhia (1º Ano EM)' },
+  { id: '2cia', label: '2ª Companhia (2º Ano EM)' },
+  { id: '3cia', label: '3ª Companhia (3º Ano EM)' }
+];
+
+async function setupAIConfig() {
+  const container = document.getElementById('ai-configs-container');
+  if (!container) return;
+
+  // Load existing configs
+  await loadAIConfigs();
+
+  // Setup AI logs button
+  const logsBtn = document.getElementById('load-ai-logs-btn');
+  if (logsBtn) {
+    logsBtn.addEventListener('click', loadAILogs);
+  }
+}
+
+async function loadAIConfigs() {
+  const container = document.getElementById('ai-configs-container');
+
+  try {
+    // Load existing configs from Firebase
+    const configs = {};
+    const snapshot = await getDocs(collection(db, 'aiConfigs'));
+    snapshot.forEach(doc => {
+      configs[doc.id] = doc.data();
+    });
+
+    // Render config form for each company
+    container.innerHTML = `
+      <form id="ai-configs-form">
+        <div style="display: grid; gap: var(--space-4);">
+          ${AI_COMPANIES.map(company => `
+            <div style="display: grid; grid-template-columns: 200px 1fr 150px auto; gap: var(--space-3); align-items: center; padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <label style="font-weight: var(--font-weight-medium);">${company.label}</label>
+              <input type="password" 
+                     class="form-input ai-api-key" 
+                     id="ai-key-${company.id}" 
+                     data-company="${company.id}"
+                     placeholder="Cole a API key aqui..."
+                     value="${configs[company.id]?.apiKey || ''}"
+                     style="font-family: monospace;">
+              <select class="form-select ai-model" id="ai-model-${company.id}" data-company="${company.id}">
+                <option value="gemini-2.0-flash-lite" ${configs[company.id]?.model === 'gemini-2.0-flash-lite' ? 'selected' : ''}>Flash Lite (Free)</option>
+                <option value="gemini-2.0-flash" ${configs[company.id]?.model === 'gemini-2.0-flash' ? 'selected' : ''}>Flash</option>
+              </select>
+              <span class="ai-config-status" id="ai-status-${company.id}">
+                ${configs[company.id]?.apiKey ? '✅' : '❌'}
+              </span>
+            </div>
+          `).join('')}
+        </div>
+        
+        <div style="margin-top: var(--space-4); display: flex; gap: var(--space-3);">
+          <button type="submit" class="btn btn--primary">
+            ${icons.check} Salvar Configurações
+          </button>
+          <button type="button" class="btn btn--secondary" id="test-ai-btn">
+            ${icons.refresh} Testar Conexão
+          </button>
+        </div>
+      </form>
+    `;
+
+    // Setup form events
+    const form = document.getElementById('ai-configs-form');
+    form.addEventListener('submit', saveAIConfigs);
+
+    const testBtn = document.getElementById('test-ai-btn');
+    testBtn.addEventListener('click', testAIConnection);
+
+  } catch (error) {
+    console.error('Error loading AI configs:', error);
+    container.innerHTML = `
+      <div class="alert alert--danger">
+        <div class="alert__icon">${icons.warning}</div>
+        <div class="alert__content">Erro ao carregar configurações: ${error.message}</div>
+      </div>
+    `;
+  }
+}
+
+async function saveAIConfigs(e) {
+  e.preventDefault();
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Salvando...';
+
+  try {
+    for (const company of AI_COMPANIES) {
+      const apiKey = document.getElementById(`ai-key-${company.id}`).value.trim();
+      const model = document.getElementById(`ai-model-${company.id}`).value;
+
+      const data = {
+        apiKey,
+        model,
+        enabled: !!apiKey,
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(doc(db, 'aiConfigs', company.id), data, { merge: true });
+
+      // Update status
+      document.getElementById(`ai-status-${company.id}`).textContent = apiKey ? '✅' : '❌';
+    }
+
+    showToast('Configurações salvas com sucesso!', 'success');
+  } catch (error) {
+    console.error('Error saving AI configs:', error);
+    showToast('Erro ao salvar: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `${icons.check} Salvar Configurações`;
+  }
+}
+
+async function testAIConnection() {
+  const btn = document.getElementById('test-ai-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Testando...';
+
+  // Test admin key first
+  const adminKey = document.getElementById('ai-key-admin').value.trim();
+  const adminModel = document.getElementById('ai-model-admin').value;
+
+  if (!adminKey) {
+    showToast('Insira a API key do Admin para testar', 'warning');
+    btn.disabled = false;
+    btn.innerHTML = `${icons.refresh} Testar Conexão`;
+    return;
+  }
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${adminModel}:generateContent?key=${adminKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Diga apenas: Conexão OK' }] }],
+        generationConfig: { maxOutputTokens: 50 }
+      })
+    });
+
+    if (response.ok) {
+      showToast('✅ Conexão com Gemini OK!', 'success');
+    } else {
+      const error = await response.json();
+      showToast('❌ Erro: ' + (error.error?.message || 'Falha na conexão'), 'error');
+    }
+  } catch (error) {
+    showToast('❌ Erro de rede: ' + error.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `${icons.refresh} Testar Conexão`;
+  }
+}
+
+async function loadAILogs() {
+  const container = document.getElementById('ai-logs-container');
+  container.innerHTML = '<div style="display: flex; justify-content: center; padding: var(--space-4);"><span class="spinner"></span></div>';
+
+  try {
+    const q = query(collection(db, 'aiConversations'), orderBy('timestamp', 'desc'));
+    const snapshot = await getDocs(q);
+    const logs = snapshot.docs.slice(0, 50).map(doc => ({ id: doc.id, ...doc.data() }));
+
+    if (logs.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; color: var(--text-tertiary); padding: var(--space-6);">
+          Nenhuma conversa registrada ainda.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Data/Hora</th>
+              <th>Usuário</th>
+              <th>Cia</th>
+              <th>Pergunta</th>
+              <th style="width: 100px;">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(log => `
+              <tr>
+                <td style="white-space: nowrap; font-size: 0.75rem;">${formatLogDate(log.timestamp)}</td>
+                <td><strong>${log.username || '-'}</strong></td>
+                <td>${log.company || 'Admin'}</td>
+                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${(log.query || '').replace(/"/g, '&quot;')}">${log.query || '-'}</td>
+                <td>
+                  <button class="btn btn--ghost btn--sm view-ai-log-btn" data-id="${log.id}" title="Ver conversa">
+                    ${icons.eye}
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    // Setup view buttons
+    container.querySelectorAll('.view-ai-log-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const log = logs.find(l => l.id === btn.dataset.id);
+        if (log) {
+          alert(`PERGUNTA:\n${log.query}\n\nRESPOSTA:\n${log.response}`);
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Error loading AI logs:', error);
+    container.innerHTML = `
+      <div class="alert alert--danger">
+        <div class="alert__icon">${icons.warning}</div>
+        <div class="alert__content">Erro ao carregar histórico: ${error.message}</div>
+      </div>
+    `;
+  }
+}
+
+function formatLogDate(timestamp) {
+  if (!timestamp) return '-';
+
+  let date;
+  if (timestamp.toDate) {
+    date = timestamp.toDate();
+  } else if (typeof timestamp === 'string') {
+    date = new Date(timestamp);
+  } else {
+    date = new Date(timestamp);
+  }
+
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
