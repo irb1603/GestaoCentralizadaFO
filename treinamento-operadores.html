@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treinamento - Sistema de Gestão de FO</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reveal.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/theme/night.css">
+    <link rel="stylesheet" href="treinamento-style.css">
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+            <!-- SLIDE 1: TÍTULO -->
+            <section data-background-gradient="linear-gradient(to bottom, #1a472a, #2d5f3f)">
+                <h1 class="title-main">Sistema de Gestão de</h1>
+                <h1 class="title-main">Faltas Operacionais</h1>
+                <h3 class="subtitle">Colégio Militar de Brasília</h3>
+                <p class="subtitle-small">Treinamento para Novos Operadores</p>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Bras%C3%A3o_do_Ex%C3%A9rcito_Brasileiro.svg/200px-Bras%C3%A3o_do_Ex%C3%A9rcito_Brasileiro.svg.png"
+                     alt="Brasão" style="width: 150px; margin-top: 30px;">
+            </section>
+
+            <!-- SLIDE 2: ÍNDICE -->
+            <section>
+                <h2>📋 Conteúdo do Treinamento</h2>
+                <ol class="index-list">
+                    <li>O que é o Sistema de FO?</li>
+                    <li>Tipos de Usuários e Permissões</li>
+                    <li>Fluxo Completo das Sanções Disciplinares</li>
+                    <li>Como Registrar um FO</li>
+                    <li>Sistema de Enquadramento (RICM)</li>
+                    <li>Status e Etapas do Processo</li>
+                    <li>Geração de Documentos</li>
+                    <li>Assistente de IA</li>
+                    <li>Boas Práticas</li>
+                </ol>
+            </section>
+
+            <!-- SLIDE 3: O QUE É O SISTEMA -->
+            <section>
+                <section>
+                    <h2>🎯 O que é o Sistema de FO?</h2>
+                    <div class="two-columns">
+                        <div>
+                            <h3>Definição</h3>
+                            <p class="text-left">Sistema web para gestão centralizada de <strong>Fatos Observados</strong> (FO) de alunos do CMB.</p>
+                            <p class="text-left">Automatiza todo o processo disciplinar desde o registro até o arquivamento.</p>
+                        </div>
+                        <div>
+                            <h3>Objetivos</h3>
+                            <ul class="text-left">
+                                <li>✓ Registrar fatos (positivos/negativos/neutros)</li>
+                                <li>✓ Aplicar sanções conforme RICM</li>
+                                <li>✓ Gerar documentação automática</li>
+                                <li>✓ Controlar fluxo processual</li>
+                                <li>✓ Manter rastreabilidade completa</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>📊 Tipos de FO</h2>
+                    <div class="three-boxes">
+                        <div class="box box-positive">
+                            <h3>✅ Positivo</h3>
+                            <p>Reconhecimento de ações meritórias</p>
+                            <p class="example">Ex: Ajudar colega, iniciativa</p>
+                        </div>
+                        <div class="box box-negative">
+                            <h3>❌ Negativo</h3>
+                            <p>Violação de normas disciplinares</p>
+                            <p class="example">Ex: Uso de celular, atraso</p>
+                        </div>
+                        <div class="box box-neutral">
+                            <h3>⚪ Neutro</h3>
+                            <p>Registro informativo sem sanção</p>
+                            <p class="example">Ex: Observação de comportamento</p>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 4: TIPOS DE USUÁRIOS -->
+            <section>
+                <section>
+                    <h2>👥 Tipos de Usuários</h2>
+                    <p>O sistema possui 5 perfis de acesso com permissões diferentes</p>
+                </section>
+
+                <section>
+                    <h2>🔐 Hierarquia de Permissões</h2>
+                    <div class="user-hierarchy">
+                        <div class="user-level level-admin">
+                            <h3>🛡️ ADMIN</h3>
+                            <p>Acesso total ao sistema</p>
+                            <ul class="permissions">
+                                <li>Ver/editar/deletar todos os FOs</li>
+                                <li>Acesso a todas as companhias</li>
+                                <li>Editar dados de alunos</li>
+                                <li>Acessar auditoria completa</li>
+                            </ul>
+                        </div>
+                        <div class="user-level level-comando">
+                            <h3>⭐ COMANDO CA</h3>
+                            <p>Supervisão geral</p>
+                            <ul class="permissions">
+                                <li>Ver todos os FOs</li>
+                                <li>Editar status</li>
+                                <li>Acesso à auditoria</li>
+                                <li>Não pode deletar FOs</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>👥 Perfis por Companhia</h2>
+                    <div class="two-columns">
+                        <div class="user-box">
+                            <h3>👤 Comandante de Cia</h3>
+                            <p class="user-id">Cmt6cia, Cmt7cia, ..., Cmt3cia</p>
+                            <ul class="permissions-small">
+                                <li>✓ Ver FOs da sua companhia</li>
+                                <li>✓ Editar FOs da sua companhia</li>
+                                <li>✓ Acessar auditoria</li>
+                                <li>✗ Ver outras companhias</li>
+                                <li>✗ Deletar FOs</li>
+                            </ul>
+                        </div>
+                        <div class="user-box">
+                            <h3>🎖️ Sargento de Cia</h3>
+                            <p class="user-id">Sgte6cia, Sgte7cia, ..., Sgte3cia</p>
+                            <ul class="permissions-small">
+                                <li>✓ Ver FOs da sua companhia</li>
+                                <li>✓ Editar FOs da sua companhia</li>
+                                <li>✗ Acessar auditoria</li>
+                                <li>✗ Ver outras companhias</li>
+                                <li>✗ Deletar FOs</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="user-box-small">
+                        <h3>📝 Auxiliar (Acesso Restrito)</h3>
+                        <p>Acesso apenas a: Faltas Escolares e Processo Disciplinar</p>
+                    </div>
+                </section>
+
+                <!-- VÍDEO 1 -->
+                <section data-background-color="#2c3e50">
+                    <h2>🎥 Vídeo Demonstrativo</h2>
+                    <div class="video-placeholder">
+                        <div class="video-content">
+                            <h3>📹 Navegando pelos Perfis de Usuário</h3>
+                            <p class="video-description">Demonstração prática de login e acesso com diferentes perfis</p>
+                            <div class="video-topics">
+                                <p><strong>O que será mostrado:</strong></p>
+                                <ul>
+                                    <li>Login como Admin</li>
+                                    <li>Login como Comandante de Companhia</li>
+                                    <li>Diferenças de acesso entre perfis</li>
+                                    <li>Filtros automáticos por companhia</li>
+                                </ul>
+                            </div>
+                            <p class="video-duration">⏱️ Duração: 2 minutos</p>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 5: FLUXO COMPLETO -->
+            <section>
+                <section>
+                    <h2>🔄 Fluxo Completo das Sanções Disciplinares</h2>
+                    <p class="subtitle-small">Do registro ao arquivamento</p>
+                </section>
+
+                <section>
+                    <h2>📍 Diagrama do Fluxo</h2>
+                    <div class="flow-diagram">
+                        <div class="flow-step step-1">
+                            <div class="step-number">1</div>
+                            <h4>REGISTRO</h4>
+                            <p>Observador registra o FO</p>
+                            <span class="status-badge">PENDENTE</span>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-step step-2">
+                            <div class="step-number">2</div>
+                            <h4>ANÁLISE</h4>
+                            <p>Companhia analisa e enquadra</p>
+                            <span class="status-badge">EM ANÁLISE</span>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-step step-3">
+                            <div class="step-number">3</div>
+                            <h4>SANÇÃO</h4>
+                            <p>Aplica sanção conforme RICM</p>
+                            <span class="status-badge status-sanction">ADV/REP/AOE/RET</span>
+                        </div>
+                    </div>
+                    <div class="flow-diagram" style="margin-top: 30px;">
+                        <div class="flow-step step-4">
+                            <div class="step-number">4</div>
+                            <h4>CONSOLIDAR</h4>
+                            <p>Atualiza comportamento</p>
+                            <span class="status-badge">CONSOLIDAR</span>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-step step-5">
+                            <div class="step-number">5</div>
+                            <h4>CONCLUIR</h4>
+                            <p>Finaliza processamento</p>
+                            <span class="status-badge">CONCLUIR</span>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-step step-6">
+                            <div class="step-number">6</div>
+                            <h4>ARQUIVAR</h4>
+                            <p>FO arquivado</p>
+                            <span class="status-badge status-done">ENCERRADO</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>📝 Etapa 1: Registro do FO</h2>
+                    <div class="process-detail">
+                        <div class="detail-left">
+                            <h3>Como Registrar?</h3>
+                            <ol class="steps-list">
+                                <li>Acessar <code>public-fo.html</code></li>
+                                <li>Validar com usuário/senha de registrador</li>
+                                <li>Preencher formulário:
+                                    <ul>
+                                        <li>Ano Escolar (6ª a 3ª Cia)</li>
+                                        <li>Número(s) do aluno</li>
+                                        <li>Tipo: Positivo/Negativo/Neutro</li>
+                                        <li>Data e hora do fato</li>
+                                        <li>Descrição detalhada</li>
+                                        <li>Nome do observador</li>
+                                    </ul>
+                                </li>
+                                <li>Enviar → Status: <strong>PENDENTE</strong></li>
+                            </ol>
+                        </div>
+                        <div class="detail-right">
+                            <div class="important-box">
+                                <h4>⚠️ Importante!</h4>
+                                <ul>
+                                    <li>Descrição deve ser objetiva e clara</li>
+                                    <li>Incluir data/hora exata do fato</li>
+                                    <li>Pode registrar múltiplos alunos</li>
+                                    <li>FO é individual por aluno</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VÍDEO 2 -->
+                <section data-background-color="#2c3e50">
+                    <h2>🎥 Vídeo Demonstrativo</h2>
+                    <div class="video-placeholder">
+                        <div class="video-content">
+                            <h3>📹 Registrando um FO na Prática</h3>
+                            <p class="video-description">Passo a passo completo do registro de um fato observado</p>
+                            <div class="video-topics">
+                                <p><strong>O que será mostrado:</strong></p>
+                                <ul>
+                                    <li>Acesso ao formulário público</li>
+                                    <li>Validação de credenciais</li>
+                                    <li>Preenchimento correto dos campos</li>
+                                    <li>Exemplo de FO negativo (uso de celular)</li>
+                                    <li>Confirmação de registro</li>
+                                </ul>
+                            </div>
+                            <p class="video-duration">⏱️ Duração: 3 minutos</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>⚖️ Etapa 2: Análise e Enquadramento</h2>
+                    <div class="process-detail">
+                        <div class="detail-left">
+                            <h3>Responsável</h3>
+                            <p>Comandante ou Sargento da Companhia</p>
+
+                            <h3 style="margin-top: 20px;">Ações Necessárias</h3>
+                            <ol class="steps-list">
+                                <li>Acessar "Fatos Observados"</li>
+                                <li>Filtrar por status: PENDENTE</li>
+                                <li>Revisar o fato descrito</li>
+                                <li>Determinar se é sancionável</li>
+                                <li>Consultar RICM para enquadramento</li>
+                                <li>Usar IA para sugestões (opcional)</li>
+                                <li>Definir:
+                                    <ul>
+                                        <li>Artigo RICM</li>
+                                        <li>Agravantes</li>
+                                        <li>Atenuantes</li>
+                                        <li>Tipo de sanção</li>
+                                    </ul>
+                                </li>
+                            </ol>
+                        </div>
+                        <div class="detail-right">
+                            <div class="ricm-box">
+                                <h4>📖 Sistema RICM</h4>
+                                <p>Regulamento Interno dos Colégios Militares</p>
+                                <div class="sanction-types">
+                                    <div class="sanction-item">
+                                        <strong>Leve</strong> → Advertência
+                                    </div>
+                                    <div class="sanction-item">
+                                        <strong>Média</strong> → Repreensão
+                                    </div>
+                                    <div class="sanction-item">
+                                        <strong>Grave</strong> → AOE
+                                    </div>
+                                    <div class="sanction-item">
+                                        <strong>Gravíssima</strong> → Retirada
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 6: SISTEMA RICM -->
+            <section>
+                <section>
+                    <h2>📖 Sistema de Enquadramento RICM</h2>
+                    <p class="subtitle-small">Regulamento Interno dos Colégios Militares</p>
+                </section>
+
+                <section>
+                    <h2>📋 46 Faltas Disciplinares</h2>
+                    <div class="ricm-examples">
+                        <div class="ricm-column">
+                            <h4>Exemplos Comuns</h4>
+                            <ul class="ricm-list">
+                                <li><strong>Art. 1</strong> - Faltar à verdade</li>
+                                <li><strong>Art. 3</strong> - Chegar atrasado</li>
+                                <li><strong>Art. 4</strong> - Uniforme inadequado</li>
+                                <li><strong>Art. 7</strong> - Deixar dependência desarrumada</li>
+                                <li><strong>Art. 8</strong> - Não apresentar trabalhos</li>
+                                <li><strong>Art. 10</strong> - Ocupar-se com outro trabalho em aula</li>
+                                <li><strong>Art. 20</strong> - Usar celular em atividades escolares ⭐</li>
+                                <li><strong>Art. 13</strong> - Simular doença</li>
+                            </ul>
+                        </div>
+                        <div class="ricm-column">
+                            <h4>Mais Graves</h4>
+                            <ul class="ricm-list">
+                                <li><strong>Art. 14</strong> - Causar danos materiais a colega</li>
+                                <li><strong>Art. 15</strong> - Publicações políticas inadequadas</li>
+                                <li><strong>Art. 16</strong> - Transação pecuniária</li>
+                                <li><strong>Art. 17</strong> - Uso irregular de uniforme</li>
+                                <li>+ 28 artigos adicionais</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p class="note">💡 O sistema possui todos os 46 artigos cadastrados</p>
+                </section>
+
+                <section>
+                    <h2>⚖️ Circunstâncias que Modificam a Sanção</h2>
+                    <div class="two-columns">
+                        <div class="circumstance-box atenuantes">
+                            <h3>⬇️ ATENUANTES (8)</h3>
+                            <p class="subtitle-small">Reduzem a severidade</p>
+                            <ul class="circum-list">
+                                <li>Matriculado há menos de 3 meses</li>
+                                <li>Ser criança ou adolescente</li>
+                                <li>Comportamento BOM/ÓTIMO/EXCEPCIONAL</li>
+                                <li>Primeira falta</li>
+                                <li>Falta de prática</li>
+                                <li>Relevância de ações prestadas</li>
+                                <li>Evitar mal maior</li>
+                                <li>Defesa própria de direitos</li>
+                            </ul>
+                        </div>
+                        <div class="circumstance-box agravantes">
+                            <h3>⬆️ AGRAVANTES (10)</h3>
+                            <p class="subtitle-small">Aumentam a severidade</p>
+                            <ul class="circum-list">
+                                <li>Ser oficial-aluno ou graduado</li>
+                                <li>Ser aluno do CFR</li>
+                                <li>Comportamento REGULAR/INSUF./MAU</li>
+                                <li>Falta em atividade escolar ⭐</li>
+                                <li><strong>REINCIDÊNCIA</strong> ⭐⭐</li>
+                                <li>Prática simultânea de 2+ faltas</li>
+                                <li>Conluio (2+ alunos)</li>
+                                <li>Abuso de atribuição</li>
+                                <li>Falta em público na presença de tropa</li>
+                                <li>Ação premeditada</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>🎯 Classificação e Sanções</h2>
+                    <div class="sanction-table">
+                        <div class="sanction-row header-row">
+                            <div>Classificação</div>
+                            <div>Sanção Aplicada</div>
+                            <div>Status no Sistema</div>
+                            <div>Características</div>
+                        </div>
+                        <div class="sanction-row level-leve">
+                            <div><strong>LEVE</strong></div>
+                            <div>Advertência</div>
+                            <div><code>ADVERTENCIA</code></div>
+                            <div>Menor sanção, registro interno</div>
+                        </div>
+                        <div class="sanction-row level-media">
+                            <div><strong>MÉDIA</strong></div>
+                            <div>Repreensão</div>
+                            <div><code>REPREENSAO</code></div>
+                            <div>Gera Nota de Aditamento ao BI</div>
+                        </div>
+                        <div class="sanction-row level-grave">
+                            <div><strong>GRAVE</strong></div>
+                            <div>AOE</div>
+                            <div><code>ATIVIDADE_OE</code></div>
+                            <div>Atividade de Orientação Educacional + dias</div>
+                        </div>
+                        <div class="sanction-row level-gravissima">
+                            <div><strong>GRAVÍSSIMA</strong></div>
+                            <div>Retirada</div>
+                            <div><code>RETIRADA</code></div>
+                            <div>Retirada suspensiva + datas de cumprimento</div>
+                        </div>
+                        <div class="sanction-row level-justificado">
+                            <div><strong>-</strong></div>
+                            <div>Justificado</div>
+                            <div><code>JUSTIFICADO</code></div>
+                            <div>Sem sanção, apenas registro</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VÍDEO 3 -->
+                <section data-background-color="#2c3e50">
+                    <h2>🎥 Vídeo Demonstrativo</h2>
+                    <div class="video-placeholder">
+                        <div class="video-content">
+                            <h3>📹 Enquadrando um FO com o Sistema RICM</h3>
+                            <p class="video-description">Como usar o RICM para aplicar a sanção correta</p>
+                            <div class="video-topics">
+                                <p><strong>O que será mostrado:</strong></p>
+                                <ul>
+                                    <li>Análise de um FO pendente</li>
+                                    <li>Consulta aos artigos RICM</li>
+                                    <li>Seleção de agravantes e atenuantes</li>
+                                    <li>Uso do assistente de IA para sugestão</li>
+                                    <li>Definição da sanção apropriada</li>
+                                    <li>Mudança de status</li>
+                                </ul>
+                            </div>
+                            <p class="video-duration">⏱️ Duração: 4 minutos</p>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 7: STATUS E ETAPAS -->
+            <section>
+                <section>
+                    <h2>🔄 Status e Etapas do Processo</h2>
+                    <p class="subtitle-small">8 status principais controlam o fluxo</p>
+                </section>
+
+                <section>
+                    <h2>1️⃣ PENDENTE</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>O que é?</h3>
+                            <p>FO recém-registrado aguardando análise da companhia</p>
+
+                            <h3>O que fazer?</h3>
+                            <ul>
+                                <li>Revisar a descrição do fato</li>
+                                <li>Verificar dados do aluno</li>
+                                <li>Decidir se é sancionável</li>
+                                <li>Enquadrar no RICM</li>
+                                <li>Mover para próximo status</li>
+                            </ul>
+
+                            <h3>Próximos status possíveis</h3>
+                            <div class="next-status">
+                                <span class="badge">ADVERTENCIA</span>
+                                <span class="badge">REPREENSAO</span>
+                                <span class="badge">ATIVIDADE_OE</span>
+                                <span class="badge">RETIRADA</span>
+                                <span class="badge">JUSTIFICADO</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>2️⃣ ADVERTÊNCIA</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>Quando usar?</h3>
+                            <p>Faltas disciplinares classificadas como <strong>LEVE</strong></p>
+
+                            <h3>Características</h3>
+                            <ul>
+                                <li>Menor sanção do sistema</li>
+                                <li>Registro interno (não vai ao BI)</li>
+                                <li>Impacta nota de comportamento</li>
+                                <li>Não requer documentação externa</li>
+                            </ul>
+
+                            <h3>Ação necessária</h3>
+                            <p>Clicar em "Incluir Medida Disciplinar" para avançar</p>
+
+                            <div class="tip-box">
+                                <strong>💡 Dica:</strong> Advertências são ideais para faltas isoladas de menor gravidade
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>3️⃣ REPREENSÃO</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>Quando usar?</h3>
+                            <p>Faltas disciplinares classificadas como <strong>MÉDIA</strong></p>
+
+                            <h3>Características</h3>
+                            <ul>
+                                <li>Sanção intermediária</li>
+                                <li><strong>Gera Nota de Aditamento ao BI</strong></li>
+                                <li>Impacto maior no comportamento</li>
+                                <li>Requer comunicação aos responsáveis</li>
+                                <li>Não tem dias de cumprimento</li>
+                            </ul>
+
+                            <h3>Documentos gerados</h3>
+                            <ul>
+                                <li>Nota para Aditamento ao BI (DOCX)</li>
+                                <li>Email aos responsáveis (opcional)</li>
+                            </ul>
+
+                            <div class="warning-box">
+                                <strong>⚠️ Atenção:</strong> Preencher data de aditamento ao BI é obrigatório
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>4️⃣ ATIVIDADE OE (AOE)</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>Quando usar?</h3>
+                            <p>Faltas disciplinares classificadas como <strong>GRAVE</strong></p>
+
+                            <h3>Características</h3>
+                            <ul>
+                                <li>Atividade de Orientação Educacional</li>
+                                <li>Sanção pedagógica e corretiva</li>
+                                <li><strong>Requer número de dias</strong></li>
+                                <li>Aluno deve cumprir atividades específicas</li>
+                                <li>Gera Nota de Aditamento ao BI</li>
+                            </ul>
+
+                            <h3>Campos obrigatórios</h3>
+                            <ul>
+                                <li>Quantidade de dias (ex: 3, 5, 7 dias)</li>
+                                <li>Data de aditamento ao BI</li>
+                                <li>Descrição da atividade (opcional)</li>
+                            </ul>
+
+                            <div class="tip-box">
+                                <strong>💡 Dica:</strong> Use o campo "Datas de Cumprimento" para acompanhar
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>5️⃣ RETIRADA</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>Quando usar?</h3>
+                            <p>Faltas disciplinares classificadas como <strong>GRAVÍSSIMA</strong></p>
+
+                            <h3>Características</h3>
+                            <ul>
+                                <li><strong>Sanção mais severa</strong></li>
+                                <li>Retirada suspensiva do aluno</li>
+                                <li>Aluno é afastado por X dias</li>
+                                <li>Requer autorização superior</li>
+                                <li>Gera documentação completa</li>
+                            </ul>
+
+                            <h3>Campos obrigatórios</h3>
+                            <ul>
+                                <li>Datas de cumprimento (início e fim)</li>
+                                <li>Data de aditamento ao BI</li>
+                                <li>Justificativa detalhada</li>
+                            </ul>
+
+                            <div class="warning-box">
+                                <strong>⚠️ Atenção:</strong> Retirada requer processo disciplinar completo
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>6️⃣ CONSOLIDAR</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>O que é?</h3>
+                            <p>Etapa de consolidação das sanções e atualização do comportamento</p>
+
+                            <h3>O que acontece?</h3>
+                            <ul>
+                                <li>Revisão final de todos os dados</li>
+                                <li><strong>Atualização da nota de comportamento</strong></li>
+                                <li>Verificação de documentos</li>
+                                <li>Preparação para conclusão</li>
+                            </ul>
+
+                            <h3>Ação necessária</h3>
+                            <p>Clicar em "Consolidar" após verificar que:</p>
+                            <ul>
+                                <li>✓ Enquadramento está correto</li>
+                                <li>✓ Sanção está apropriada</li>
+                                <li>✓ Agravantes/atenuantes definidos</li>
+                                <li>✓ Datas preenchidas</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>7️⃣ CONCLUIR</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>O que é?</h3>
+                            <p>Etapa final de processamento antes do arquivamento</p>
+
+                            <h3>O que fazer?</h3>
+                            <ul>
+                                <li>Verificar se processo está completo</li>
+                                <li>Conferir documentos gerados</li>
+                                <li>Validar comunicações enviadas</li>
+                                <li>Marcar como concluído</li>
+                            </ul>
+
+                            <h3>Checklist antes de concluir</h3>
+                            <div class="checklist">
+                                <div class="check-item">☑️ Nota de aditamento gerada</div>
+                                <div class="check-item">☑️ Responsáveis comunicados</div>
+                                <div class="check-item">☑️ Termo de ciência assinado (se aplicável)</div>
+                                <div class="check-item">☑️ Comportamento atualizado</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>8️⃣ ENCERRADO</h2>
+                    <div class="status-detail">
+                        <div class="status-info">
+                            <h3>O que é?</h3>
+                            <p>FO completamente processado e arquivado</p>
+
+                            <h3>Características</h3>
+                            <ul>
+                                <li>Status final do fluxo</li>
+                                <li>FO não pode mais ser editado (apenas Admin)</li>
+                                <li>Todos os documentos gerados</li>
+                                <li>Processo completo e rastreável</li>
+                            </ul>
+
+                            <h3>Onde encontrar?</h3>
+                            <p>Menu: <strong>Encerrados</strong></p>
+
+                            <h3>O que fazer?</h3>
+                            <ul>
+                                <li>Consultar para referência</li>
+                                <li>Gerar relatórios</li>
+                                <li>Auditar processos anteriores</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VÍDEO 4 -->
+                <section data-background-color="#2c3e50">
+                    <h2>🎥 Vídeo Demonstrativo</h2>
+                    <div class="video-placeholder">
+                        <div class="video-content">
+                            <h3>📹 Navegando pelos Status do Sistema</h3>
+                            <p class="video-description">Acompanhamento completo de um FO através de todos os status</p>
+                            <div class="video-topics">
+                                <p><strong>O que será mostrado:</strong></p>
+                                <ul>
+                                    <li>FO de PENDENTE até ENCERRADO</li>
+                                    <li>Como mudar de status</li>
+                                    <li>Preenchimento de campos em cada etapa</li>
+                                    <li>Consolidação e conclusão</li>
+                                    <li>Visualização de FO encerrado</li>
+                                </ul>
+                            </div>
+                            <p class="video-duration">⏱️ Duração: 5 minutos</p>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 8: GERAÇÃO DE DOCUMENTOS -->
+            <section>
+                <section>
+                    <h2>📄 Geração de Documentos</h2>
+                    <p class="subtitle-small">Automatização da documentação disciplinar</p>
+                </section>
+
+                <section>
+                    <h2>📋 Nota para Aditamento ao BI</h2>
+                    <div class="doc-detail">
+                        <div class="doc-info">
+                            <h3>Quando é gerada?</h3>
+                            <p>Para sanções de <strong>REPREENSÃO</strong>, <strong>AOE</strong> e <strong>RETIRADA</strong></p>
+
+                            <h3>Como gerar?</h3>
+                            <ol class="steps-list">
+                                <li>Acessar menu "Notas Aditamento"</li>
+                                <li>Selecionar data de aditamento</li>
+                                <li>Sistema agrupa todos os FOs da data</li>
+                                <li>Clicar em "Gerar Nota de Aditamento"</li>
+                                <li>Documento DOCX é baixado</li>
+                            </ol>
+
+                            <h3>Formato</h3>
+                            <ul>
+                                <li>Arquivo: <code>Nota_Aditamento_YYYYMMDD.docx</code></li>
+                                <li>Microsoft Word (.docx)</li>
+                                <li>Formatação profissional automática</li>
+                            </ul>
+                        </div>
+                        <div class="doc-preview">
+                            <div class="doc-example">
+                                <h4>📄 Estrutura do Documento</h4>
+                                <div class="doc-structure">
+                                    <p><strong>NOTA PARA ADITAMENTO AO BI</strong></p>
+                                    <p>Companhia: [Nome]</p>
+                                    <p>Data: [DD/MM/YYYY]</p>
+                                    <hr>
+                                    <p><strong>REPREENSÃO:</strong></p>
+                                    <p>Ao Aluno(a) [Nº], [Nome], da turma [T]...</p>
+                                    <p>Por ter [descrição].</p>
+                                    <p>Conforme nº [Art.], do apêndice 1...</p>
+                                    <hr>
+                                    <p><strong>AOE:</strong></p>
+                                    <p>[Lista de alunos...]</p>
+                                    <hr>
+                                    <p><strong>RETIRADA:</strong></p>
+                                    <p>[Lista de alunos...]</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>📑 Processo Disciplinar</h2>
+                    <div class="doc-detail">
+                        <div class="doc-info">
+                            <h3>O que é?</h3>
+                            <p>Documento completo com todo o histórico disciplinar do aluno</p>
+
+                            <h3>Como gerar?</h3>
+                            <ol class="steps-list">
+                                <li>Acessar menu "Processo Disciplinar"</li>
+                                <li>Selecionar número do aluno</li>
+                                <li>Selecionar FOs a incluir</li>
+                                <li>Adicionar termos de ciência</li>
+                                <li>Adicionar outros documentos</li>
+                                <li>Gerar PDF</li>
+                            </ol>
+
+                            <h3>Conteúdo</h3>
+                            <ul>
+                                <li>Cabeçalho oficial CMB</li>
+                                <li>Dados completos do aluno</li>
+                                <li>Todos os FOs selecionados</li>
+                                <li>Enquadramentos RICM</li>
+                                <li>Sanções aplicadas</li>
+                                <li>Termos de ciência anexados</li>
+                                <li>Assinatura eletrônica</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>✍️ Termo de Ciência</h2>
+                    <div class="doc-detail">
+                        <div class="doc-info">
+                            <h3>O que é?</h3>
+                            <p>Documento assinado pelo responsável ou aluno comprovando ciência da sanção</p>
+
+                            <h3>Como fazer upload?</h3>
+                            <ol class="steps-list">
+                                <li>Acessar "Processo Disciplinar"</li>
+                                <li>Selecionar aluno</li>
+                                <li>Clicar em "Upload Termo de Ciência"</li>
+                                <li>Escolher arquivo ou usar câmera</li>
+                                <li>Arquivo é armazenado no Firebase Storage</li>
+                            </ol>
+
+                            <h3>Formatos aceitos</h3>
+                            <ul>
+                                <li>PDF (.pdf)</li>
+                                <li>Imagens (JPEG, PNG)</li>
+                                <li>Captura direto da câmera</li>
+                            </ul>
+
+                            <div class="tip-box">
+                                <strong>💡 Dica:</strong> Use a câmera do celular para digitalizar termos assinados rapidamente
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VÍDEO 5 -->
+                <section data-background-color="#2c3e50">
+                    <h2>🎥 Vídeo Demonstrativo</h2>
+                    <div class="video-placeholder">
+                        <div class="video-content">
+                            <h3>📹 Gerando Documentos Automáticos</h3>
+                            <p class="video-description">Como gerar e gerenciar toda a documentação disciplinar</p>
+                            <div class="video-topics">
+                                <p><strong>O que será mostrado:</strong></p>
+                                <ul>
+                                    <li>Geração de Nota de Aditamento em DOCX</li>
+                                    <li>Criação de Processo Disciplinar em PDF</li>
+                                    <li>Upload de Termo de Ciência</li>
+                                    <li>Visualização de documentos anexados</li>
+                                    <li>Download e impressão</li>
+                                </ul>
+                            </div>
+                            <p class="video-duration">⏱️ Duração: 4 minutos</p>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 9: ASSISTENTE DE IA -->
+            <section>
+                <section>
+                    <h2>🤖 Assistente de IA</h2>
+                    <p class="subtitle-small">Google Gemini integrado ao sistema</p>
+                </section>
+
+                <section>
+                    <h2>💬 O que a IA pode fazer?</h2>
+                    <div class="ai-features">
+                        <div class="ai-feature">
+                            <div class="ai-icon">📊</div>
+                            <h4>Estatísticas de FOs</h4>
+                            <p>Quantos FOs positivos/negativos foram registrados em um período</p>
+                            <div class="ai-example">
+                                "Quantos FOs negativos foram registrados esta semana?"
+                            </div>
+                        </div>
+                        <div class="ai-feature">
+                            <div class="ai-icon">👤</div>
+                            <h4>Identificar Observadores</h4>
+                            <p>Quem mais registrou FOs em um período</p>
+                            <div class="ai-example">
+                                "Quem foi o observador que mais registrou FO este mês?"
+                            </div>
+                        </div>
+                        <div class="ai-feature">
+                            <div class="ai-icon">📋</div>
+                            <h4>FOs para Aditamento</h4>
+                            <p>Lista de FOs que serão aditados ao BI</p>
+                            <div class="ai-example">
+                                "Quais FOs serão aditados esta semana?"
+                            </div>
+                        </div>
+                        <div class="ai-feature">
+                            <div class="ai-icon">⚖️</div>
+                            <h4>Sugestão de Enquadramento</h4>
+                            <p>Analisa descrição e sugere artigo RICM</p>
+                            <div class="ai-example">
+                                "O aluno usou celular em sala. Qual o enquadramento?"
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>🎯 Sugestão de Enquadramento</h2>
+                    <div class="ai-enquadramento">
+                        <div class="ai-left">
+                            <h3>Como funciona?</h3>
+                            <ol class="steps-list">
+                                <li>Descreva o fato para a IA</li>
+                                <li>IA analisa o RICM completo</li>
+                                <li>Retorna:
+                                    <ul>
+                                        <li>Artigo(s) aplicável(is)</li>
+                                        <li>Agravantes sugeridos</li>
+                                        <li>Atenuantes sugeridos</li>
+                                        <li>Classificação provável</li>
+                                    </ul>
+                                </li>
+                                <li>Você decide se aceita a sugestão</li>
+                            </ol>
+                        </div>
+                        <div class="ai-right">
+                            <div class="ai-example-box">
+                                <h4>Exemplo de Consulta</h4>
+                                <div class="ai-query">
+                                    <strong>Usuário:</strong> "O aluno estava usando celular durante a prova de matemática"
+                                </div>
+                                <div class="ai-response">
+                                    <strong>IA Responde:</strong>
+                                    <ul>
+                                        <li><strong>Artigo:</strong> 20 - Utilizar telefones celulares nas atividades escolares</li>
+                                        <li><strong>Agravante:</strong> Item 4 (cometer em atividade escolar)</li>
+                                        <li><strong>Atenuante:</strong> Verificar se é primeira falta</li>
+                                        <li><strong>Classificação:</strong> MÉDIA → Repreensão</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>📱 Onde usar o Assistente?</h2>
+                    <div class="ai-location">
+                        <p>Ícone do chat 💬 disponível em todas as páginas</p>
+                        <div class="ai-screens">
+                            <div class="screen-item">
+                                <h4>Dashboard</h4>
+                                <p>Estatísticas gerais</p>
+                            </div>
+                            <div class="screen-item">
+                                <h4>Fatos Observados</h4>
+                                <p>Análise de FOs</p>
+                            </div>
+                            <div class="screen-item">
+                                <h4>Sanções</h4>
+                                <p>Sugestão de enquadramento</p>
+                            </div>
+                            <div class="screen-item">
+                                <h4>Qualquer tela</h4>
+                                <p>Perguntas gerais</p>
+                            </div>
+                        </div>
+
+                        <div class="warning-box" style="margin-top: 30px;">
+                            <strong>⚠️ Importante:</strong> A IA é uma ferramenta de auxílio. A decisão final sobre enquadramento e sanção é sempre do responsável pela companhia.
+                        </div>
+                    </div>
+                </section>
+
+                <!-- VÍDEO 6 -->
+                <section data-background-color="#2c3e50">
+                    <h2>🎥 Vídeo Demonstrativo</h2>
+                    <div class="video-placeholder">
+                        <div class="video-content">
+                            <h3>📹 Usando o Assistente de IA</h3>
+                            <p class="video-description">Como tirar máximo proveito da inteligência artificial integrada</p>
+                            <div class="video-topics">
+                                <p><strong>O que será mostrado:</strong></p>
+                                <ul>
+                                    <li>Abrir o chat da IA</li>
+                                    <li>Fazer perguntas sobre estatísticas</li>
+                                    <li>Solicitar sugestão de enquadramento</li>
+                                    <li>Interpretar respostas da IA</li>
+                                    <li>Aplicar sugestões no sistema</li>
+                                </ul>
+                            </div>
+                            <p class="video-duration">⏱️ Duração: 3 minutos</p>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 10: BOAS PRÁTICAS -->
+            <section>
+                <section>
+                    <h2>✅ Boas Práticas</h2>
+                    <p class="subtitle-small">Dicas para uso eficiente do sistema</p>
+                </section>
+
+                <section>
+                    <h2>📝 Registro de FO</h2>
+                    <div class="best-practices">
+                        <div class="practice-item do">
+                            <h3>✅ FAÇA</h3>
+                            <ul>
+                                <li>Descreva o fato de forma objetiva e clara</li>
+                                <li>Inclua data e hora exata</li>
+                                <li>Seja específico sobre o que aconteceu</li>
+                                <li>Use linguagem profissional</li>
+                                <li>Registre logo após o fato</li>
+                                <li>Verifique o número do aluno</li>
+                            </ul>
+                            <div class="example-box">
+                                <strong>Exemplo bom:</strong><br>
+                                "Em 15/12/2024 às 14:30h, durante a aula de matemática, o aluno estava utilizando celular para enviar mensagens, mesmo após advertência verbal do professor."
+                            </div>
+                        </div>
+                        <div class="practice-item dont">
+                            <h3>❌ NÃO FAÇA</h3>
+                            <ul>
+                                <li>Usar linguagem vaga ou imprecisa</li>
+                                <li>Incluir opiniões pessoais</li>
+                                <li>Esquecer de informar data/hora</li>
+                                <li>Registrar FOs "por ouvir dizer"</li>
+                                <li>Deixar campos em branco</li>
+                                <li>Usar gírias ou termos informais</li>
+                            </ul>
+                            <div class="example-box">
+                                <strong>Exemplo ruim:</strong><br>
+                                "O aluno estava bagunçando na aula"
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>⚖️ Enquadramento e Sanções</h2>
+                    <div class="best-practices">
+                        <div class="practice-group">
+                            <h3>🎯 Proporcionalidade</h3>
+                            <ul>
+                                <li>A sanção deve ser proporcional à gravidade</li>
+                                <li>Considere sempre agravantes e atenuantes</li>
+                                <li>Analise o histórico do aluno</li>
+                                <li>Verifique reincidência</li>
+                            </ul>
+                        </div>
+                        <div class="practice-group">
+                            <h3>📖 Consulte o RICM</h3>
+                            <ul>
+                                <li>Sempre baseie-se no RICM</li>
+                                <li>Use a IA como auxílio, não como decisão final</li>
+                                <li>Documente o artigo aplicado</li>
+                                <li>Justifique agravantes/atenuantes</li>
+                            </ul>
+                        </div>
+                        <div class="practice-group">
+                            <h3>📄 Documentação</h3>
+                            <ul>
+                                <li>Preencha todos os campos obrigatórios</li>
+                                <li>Mantenha documentos organizados</li>
+                                <li>Obtenha termos de ciência sempre que necessário</li>
+                                <li>Comunique responsáveis adequadamente</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>🔄 Fluxo de Trabalho</h2>
+                    <div class="workflow-tips">
+                        <div class="tip-card">
+                            <div class="tip-number">1</div>
+                            <h4>Processar FOs Regularmente</h4>
+                            <p>Não deixe acumular FOs pendentes. Processe-os diariamente ou semanalmente.</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-number">2</div>
+                            <h4>Verificar Antes de Consolidar</h4>
+                            <p>Revise todos os dados antes de consolidar. Erros são mais difíceis de corrigir depois.</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-number">3</div>
+                            <h4>Usar Filtros</h4>
+                            <p>Use filtros por status, data e companhia para organizar seu trabalho.</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-number">4</div>
+                            <h4>Acompanhar Comportamento</h4>
+                            <p>Monitore o impacto das sanções no comportamento dos alunos.</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-number">5</div>
+                            <h4>Gerar Aditamentos em Lote</h4>
+                            <p>Agrupe FOs por data de aditamento para gerar documentos em lote.</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-number">6</div>
+                            <h4>Consultar Auditoria</h4>
+                            <p>Use a auditoria para rastrear alterações e esclarecer dúvidas.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>⚠️ Erros Comuns</h2>
+                    <div class="common-errors">
+                        <div class="error-item">
+                            <div class="error-icon">❌</div>
+                            <div class="error-content">
+                                <h4>Esquecer de preencher data de aditamento</h4>
+                                <p><strong>Solução:</strong> Sempre defina a data de aditamento antes de mover para CONSOLIDAR</p>
+                            </div>
+                        </div>
+                        <div class="error-item">
+                            <div class="error-icon">❌</div>
+                            <div class="error-content">
+                                <h4>Não considerar agravantes/atenuantes</h4>
+                                <p><strong>Solução:</strong> Consulte a lista completa antes de definir a sanção</p>
+                            </div>
+                        </div>
+                        <div class="error-item">
+                            <div class="error-icon">❌</div>
+                            <div class="error-content">
+                                <h4>Aplicar sanção desproporcional</h4>
+                                <p><strong>Solução:</strong> Use a IA para sugestões e consulte o histórico do aluno</p>
+                            </div>
+                        </div>
+                        <div class="error-item">
+                            <div class="error-icon">❌</div>
+                            <div class="error-content">
+                                <h4>Não obter termo de ciência</h4>
+                                <p><strong>Solução:</strong> Sempre obtenha e faça upload do termo assinado</p>
+                            </div>
+                        </div>
+                        <div class="error-item">
+                            <div class="error-icon">❌</div>
+                            <div class="error-content">
+                                <h4>Consolidar sem revisar</h4>
+                                <p><strong>Solução:</strong> Sempre revise todos os campos antes de consolidar</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 11: RECURSOS ADICIONAIS -->
+            <section>
+                <section>
+                    <h2>🛠️ Recursos Adicionais</h2>
+                    <p class="subtitle-small">Funcionalidades complementares do sistema</p>
+                </section>
+
+                <section>
+                    <h2>📊 Dashboard e Estatísticas</h2>
+                    <div class="additional-features">
+                        <div class="feature-box">
+                            <h3>📈 Dashboard</h3>
+                            <ul>
+                                <li>Visão geral de FOs recentes</li>
+                                <li>Ações rápidas</li>
+                                <li>Gráficos de tendências</li>
+                            </ul>
+                        </div>
+                        <div class="feature-box">
+                            <h3>📊 Estatísticas</h3>
+                            <ul>
+                                <li>Análises detalhadas por período</li>
+                                <li>Comparativos entre companhias</li>
+                                <li>Rankings de faltas</li>
+                            </ul>
+                        </div>
+                        <div class="feature-box">
+                            <h3>📝 Comportamento</h3>
+                            <ul>
+                                <li>Notas de comportamento atualizadas</li>
+                                <li>Histórico de mudanças</li>
+                                <li>Alertas de queda</li>
+                            </ul>
+                        </div>
+                        <div class="feature-box">
+                            <h3>📚 Faltas Escolares</h3>
+                            <ul>
+                                <li>Registro de faltas de frequência</li>
+                                <li>Por tempo de aula</li>
+                                <li>Vinculado a processo disciplinar</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>🔍 Auditoria</h2>
+                    <div class="audit-info">
+                        <h3>O que é registrado?</h3>
+                        <ul>
+                            <li>✓ Todas as criações de FO</li>
+                            <li>✓ Todas as edições (antes e depois)</li>
+                            <li>✓ Todas as exclusões</li>
+                            <li>✓ Mudanças de status</li>
+                            <li>✓ Quem fez a alteração</li>
+                            <li>✓ Quando foi feito</li>
+                        </ul>
+
+                        <h3 style="margin-top: 30px;">Para que serve?</h3>
+                        <ul>
+                            <li>Rastreabilidade completa</li>
+                            <li>Investigação de problemas</li>
+                            <li>Verificação de conformidade</li>
+                            <li>Histórico de alterações</li>
+                        </ul>
+
+                        <div class="tip-box" style="margin-top: 30px;">
+                            <strong>💡 Dica:</strong> Use filtros de data e usuário para encontrar alterações específicas
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <!-- SLIDE 12: RESUMO -->
+            <section>
+                <section data-background-gradient="linear-gradient(to bottom, #1a472a, #2d5f3f)">
+                    <h2>📚 Resumo do Treinamento</h2>
+                    <div class="summary">
+                        <div class="summary-item">
+                            <h3>1. Sistema de FO</h3>
+                            <p>Gestão centralizada de fatos observados com fluxo automatizado</p>
+                        </div>
+                        <div class="summary-item">
+                            <h3>2. Tipos de Usuários</h3>
+                            <p>5 perfis com permissões específicas (Admin, ComandoCA, Comandante, Sargento, Auxiliar)</p>
+                        </div>
+                        <div class="summary-item">
+                            <h3>3. Fluxo Processual</h3>
+                            <p>8 status: Pendente → Sanção → Consolidar → Concluir → Encerrado</p>
+                        </div>
+                        <div class="summary-item">
+                            <h3>4. Sistema RICM</h3>
+                            <p>46 faltas, 8 atenuantes, 10 agravantes, 4 tipos de sanções</p>
+                        </div>
+                        <div class="summary-item">
+                            <h3>5. Documentos</h3>
+                            <p>Notas de Aditamento (DOCX), Processos Disciplinares (PDF), Termos de Ciência</p>
+                        </div>
+                        <div class="summary-item">
+                            <h3>6. Assistente de IA</h3>
+                            <p>Google Gemini para estatísticas e sugestões de enquadramento</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2>🎯 Checklist do Operador</h2>
+                    <div class="final-checklist">
+                        <div class="checklist-section">
+                            <h3>Ao Registrar FO</h3>
+                            <div class="check-item">☑️ Descrição clara e objetiva</div>
+                            <div class="check-item">☑️ Data e hora corretas</div>
+                            <div class="check-item">☑️ Número do aluno verificado</div>
+                            <div class="check-item">☑️ Tipo correto (positivo/negativo/neutro)</div>
+                        </div>
+                        <div class="checklist-section">
+                            <h3>Ao Enquadrar</h3>
+                            <div class="check-item">☑️ Consultar RICM</div>
+                            <div class="check-item">☑️ Considerar agravantes e atenuantes</div>
+                            <div class="check-item">☑️ Verificar histórico do aluno</div>
+                            <div class="check-item">☑️ Sanção proporcional à falta</div>
+                        </div>
+                        <div class="checklist-section">
+                            <h3>Ao Consolidar</h3>
+                            <div class="check-item">☑️ Revisar todos os campos</div>
+                            <div class="check-item">☑️ Data de aditamento preenchida</div>
+                            <div class="check-item">☑️ Documentos anexados</div>
+                            <div class="check-item">☑️ Responsáveis comunicados</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section data-background-gradient="linear-gradient(to bottom, #1a472a, #2d5f3f)">
+                    <h1>Fim do Treinamento</h1>
+                    <h3>Parabéns! 🎉</h3>
+                    <p>Você está pronto para operar o Sistema de Gestão de FO</p>
+                    <div style="margin-top: 50px;">
+                        <p class="subtitle-small">Em caso de dúvidas, consulte:</p>
+                        <ul class="final-resources">
+                            <li>💬 Assistente de IA integrado</li>
+                            <li>🔍 Auditoria para referências</li>
+                            <li>👥 Seu comandante ou administrador</li>
+                        </ul>
+                    </div>
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/92/Bras%C3%A3o_do_Ex%C3%A9rcito_Brasileiro.svg/200px-Bras%C3%A3o_do_Ex%C3%A9rcito_Brasileiro.svg.png"
+                         alt="Brasão" style="width: 120px; margin-top: 30px; opacity: 0.8;">
+                </section>
+            </section>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.0/dist/reveal.js"></script>
+    <script src="treinamento-script.js"></script>
+</body>
+</html>
