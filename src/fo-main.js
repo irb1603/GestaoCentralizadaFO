@@ -434,33 +434,43 @@ function setupFOFormEvents() {
       // Verify authentication against foRegistradores
       const registrador = await validateFORegistrador(authUsuario, authSenha);
 
-      // Build student info for the record
-      const studentInfo = foundStudentsList.map(s => ({
-        numero: s.numero,
-        nome: s.nome,
-        turma: s.turma
-      }));
+      // Create a separate FO for EACH student
+      // This ensures each student has their own FO record with the same fact details
+      const studentsToProcess = foundStudentsList.length > 0
+        ? foundStudentsList
+        : studentNumbers.map(num => ({ numero: num, nome: null, turma: null }));
 
-      // Prepare data
-      const foData = {
-        anoEscolar,
-        company: anoEscolar, // Same as anoEscolar for filtering
-        studentNumbers,
-        studentInfo, // Include found student details
-        tipo,
-        dataFato,
-        horaFato,
-        descricao,
-        nomeObservador,
-        registradoPor: authUsuario,
-        status: tipo === 'neutro' ? 'encerrado' : 'pendente',
-        dataRegistro: new Date().toISOString().split('T')[0], // Data do registro no sistema
-        tipoFO: 'individual', // individual ou coletivo (default individual)
-        createdAt: serverTimestamp()
-      };
+      if (studentsToProcess.length === 0) {
+        throw new Error('Nenhum aluno encontrado para registrar.');
+      }
 
-      // Save to Firestore
-      await addDoc(collection(db, 'fatosObservados'), foData);
+      // Save one FO per student
+      for (const student of studentsToProcess) {
+        const foData = {
+          anoEscolar,
+          company: anoEscolar, // Same as anoEscolar for filtering
+          studentNumbers: [student.numero], // Only this student's number
+          studentInfo: [{  // Only this student's info
+            numero: student.numero,
+            nome: student.nome || 'Não encontrado',
+            turma: student.turma || '-'
+          }],
+          tipo,
+          dataFato,
+          horaFato,
+          descricao,
+          nomeObservador,
+          registradoPor: authUsuario,
+          status: 'pendente', // All FOs start as pendente, including neutral ones
+          dataRegistro: new Date().toISOString().split('T')[0], // Data do registro no sistema
+          tipoFO: 'individual',
+          createdAt: serverTimestamp(),
+          updatedAt: new Date().toISOString() // Required for encerrados page ordering
+        };
+
+        // Save to Firestore
+        await addDoc(collection(db, 'fatosObservados'), foData);
+      }
 
       // Show success
       form.classList.add('hidden');
