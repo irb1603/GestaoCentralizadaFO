@@ -8,15 +8,22 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
   query,
   where,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { COMPANY_NAMES } from './firebase/auth.js';
 import { icons } from './utils/icons.js';
+import {
+  getCachedStudent,
+  cacheStudent,
+  getCachedAuth,
+  cacheAuth
+} from './services/cacheService.js';
 
-// Cache for student lookups
-let studentCache = new Map();
+// List of found students for current form
 let foundStudentsList = [];
 
 /**
@@ -26,6 +33,16 @@ let foundStudentsList = [];
  * @returns {Promise<Object>} Registrador data on success
  */
 async function validateFORegistrador(usuario, senha) {
+  // Check cache first - avoid repeated Firebase calls for same credentials
+  const cachedResult = getCachedAuth(usuario, senha);
+  if (cachedResult) {
+    if (cachedResult.valid) {
+      return cachedResult.registrador;
+    } else {
+      throw new Error(cachedResult.error);
+    }
+  }
+
   try {
     // First try to find in foRegistradores collection
     const q = query(
@@ -37,11 +54,17 @@ async function validateFORegistrador(usuario, senha) {
     if (!snapshot.empty) {
       const registrador = snapshot.docs[0].data();
       if (registrador.senha === senha) {
+        // Cache successful auth
+        cacheAuth(usuario, senha, { valid: true, registrador });
         return registrador;
       }
-      throw new Error('Palavra passe incorreta');
+      // Cache failed auth (wrong password)
+      cacheAuth(usuario, senha, { valid: false, error: 'Senha incorreta' });
+      throw new Error('Senha incorreta');
     }
 
+    // Cache failed auth (user not found)
+    cacheAuth(usuario, senha, { valid: false, error: 'Usuário não encontrado' });
     throw new Error('Usuário não encontrado');
   } catch (error) {
     if (error.message.includes('passe') || error.message.includes('encontrado')) {
@@ -164,9 +187,14 @@ function renderFOForm() {
             
             <!-- Autenticação -->
             <div class="fo-auth-section">
-              <div class="fo-auth-section__title">
-                ${icons.lock}
-                <span>Autenticação</span>
+              <div class="fo-auth-section__title" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  ${icons.lock}
+                  <span>Autenticação</span>
+                </div>
+                <a href="#" id="first-access-link" style="font-size: 0.85rem; color: var(--color-primary-600); text-decoration: underline;">
+                  1º Acesso? Cadastre-se
+                </a>
               </div>
               
               <div class="fo-form__row">
@@ -177,7 +205,7 @@ function renderFOForm() {
                 </div>
                 
                 <div class="form-group" style="margin-bottom: 0;">
-                  <label class="form-label form-label--required" for="auth-senha">Palavra Passe:</label>
+                  <label class="form-label form-label--required" for="auth-senha">Senha:</label>
                   <input type="password" class="form-input" id="auth-senha" name="authSenha" 
                          placeholder="Digite a senha do usuário" required autocomplete="current-password">
                 </div>
@@ -230,6 +258,119 @@ function renderFOForm() {
           <a href="/">← Voltar para o Sistema</a>
         </div>
       </div>
+      
+      <!-- First Access Modal -->
+      <div id="first-access-modal" class="fo-modal hidden">
+        <div class="fo-modal__overlay"></div>
+        <div class="fo-modal__content">
+          <div class="fo-modal__header">
+            <h3>1º Acesso - Cadastro de Usuário</h3>
+            <button type="button" class="fo-modal__close" id="close-modal-btn">×</button>
+          </div>
+          <div class="fo-modal__body">
+            <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
+              Cadastre seu usuário e senha para poder registrar Fatos Observados. <br>
+              <strong>Atenção:</strong> O administrador irá visualizar seu cadastro.
+            </p>
+            
+            <form id="first-access-form">
+              <div class="form-group">
+                <label class="form-label form-label--required">Usuário</label>
+                <input type="text" class="form-input" id="new-usuario" placeholder="Ex: Prof.Silva" required>
+                <p style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 4px;">Escolha um nome de usuário único</p>
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label form-label--required">Senha</label>
+                <input type="password" class="form-input" id="new-senha" placeholder="Crie uma senha" required minlength="4">
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label form-label--required">Confirmar Senha</label>
+                <input type="password" class="form-input" id="confirm-senha" placeholder="Confirme a senha" required minlength="4">
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">Nome Completo</label>
+                <input type="text" class="form-input" id="new-nome" placeholder="Seu nome completo">
+              </div>
+              
+              <div id="register-error" class="alert alert--danger hidden" style="margin-bottom: var(--space-4);">
+                <span id="register-error-message"></span>
+              </div>
+              
+              <div id="register-success" class="alert alert--success hidden" style="margin-bottom: var(--space-4);">
+                <span>Cadastro realizado com sucesso! Você já pode usar seu usuário e senha.</span>
+              </div>
+              
+              <div style="display: flex; gap: var(--space-3); justify-content: flex-end;">
+                <button type="button" class="btn btn--ghost" id="cancel-register-btn">Cancelar</button>
+                <button type="submit" class="btn btn--primary" id="register-btn">
+                  ${icons.check} Cadastrar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .fo-modal {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .fo-modal.hidden {
+          display: none;
+        }
+        .fo-modal__overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.5);
+        }
+        .fo-modal__content {
+          position: relative;
+          background: white;
+          border-radius: 12px;
+          width: 90%;
+          max-width: 450px;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        .fo-modal__header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          border-bottom: 1px solid var(--border-light);
+        }
+        .fo-modal__header h3 {
+          margin: 0;
+          font-size: 1.1rem;
+        }
+        .fo-modal__close {
+          border: none;
+          background: none;
+          font-size: 1.5rem;
+          cursor: pointer;
+          color: var(--text-secondary);
+          padding: 0;
+          line-height: 1;
+        }
+        .fo-modal__body {
+          padding: 20px;
+        }
+      </style>
     </div>
   `;
 
@@ -247,9 +388,14 @@ function renderFOForm() {
 }
 
 async function lookupStudent(numero) {
-  // Check cache first
-  if (studentCache.has(numero)) {
-    return studentCache.get(numero);
+  // Check persistent cache first (survives page reloads)
+  const cached = getCachedStudent(numero);
+  if (cached !== null) {
+    // If cached as "not found", return null
+    if (cached.notFound) {
+      return null;
+    }
+    return cached;
   }
 
   try {
@@ -258,11 +404,13 @@ async function lookupStudent(numero) {
 
     if (docSnap.exists()) {
       const student = { id: docSnap.id, ...docSnap.data() };
-      studentCache.set(numero, student);
+      // Cache in persistent storage
+      cacheStudent(student);
       return student;
     }
 
-    studentCache.set(numero, null);
+    // Cache "not found" result to avoid repeated lookups
+    cacheStudent({ numero, notFound: true });
     return null;
   } catch (error) {
     console.error('Error looking up student:', error);
@@ -295,12 +443,13 @@ async function updateStudentsPreview(numbersString) {
   preview.style.display = 'block';
   preview.innerHTML = '<span class="spinner"></span><span style="margin-left: 8px;">Buscando alunos...</span>';
 
-  // Lookup each student
-  const results = [];
-  for (const numero of numbers) {
+  // Lookup all students in PARALLEL (much faster than sequential)
+  const studentPromises = numbers.map(async (numero) => {
     const student = await lookupStudent(numero);
-    results.push({ numero, student });
-  }
+    return { numero, student };
+  });
+
+  const results = await Promise.all(studentPromises);
 
   foundStudentsList = results.filter(r => r.student).map(r => r.student);
 
@@ -350,19 +499,25 @@ function setupFOFormEvents() {
   const submitBtn = document.getElementById('submit-btn');
   const studentNumbersInput = document.getElementById('aluno-numeros');
 
-  // Student numbers lookup with debounce
+  // Student numbers lookup with debounce (1000ms to reduce Firebase calls)
   let lookupTimeout;
   studentNumbersInput.addEventListener('input', (e) => {
     clearTimeout(lookupTimeout);
     lookupTimeout = setTimeout(() => {
       updateStudentsPreview(e.target.value);
-    }, 500);
+    }, 1000); // Increased from 500ms to reduce queries during typing
   });
 
-  // Also lookup on blur
+  // Also lookup on blur - but only if we don't have results yet
+  let lastLookupValue = '';
   studentNumbersInput.addEventListener('blur', (e) => {
     clearTimeout(lookupTimeout);
-    updateStudentsPreview(e.target.value);
+    const currentValue = e.target.value.trim();
+    // Only do lookup if value changed and we don't have matching results
+    if (currentValue && currentValue !== lastLookupValue) {
+      lastLookupValue = currentValue;
+      updateStudentsPreview(currentValue);
+    }
   });
 
   // Clear form
@@ -444,7 +599,9 @@ function setupFOFormEvents() {
         throw new Error('Nenhum aluno encontrado para registrar.');
       }
 
-      // Save one FO per student
+      // Save one FO per student using BATCH WRITE (more efficient)
+      const batch = writeBatch(db);
+
       for (const student of studentsToProcess) {
         const foData = {
           anoEscolar,
@@ -468,9 +625,13 @@ function setupFOFormEvents() {
           updatedAt: new Date().toISOString() // Required for encerrados page ordering
         };
 
-        // Save to Firestore
-        await addDoc(collection(db, 'fatosObservados'), foData);
+        // Create a new document reference for each FO
+        const newDocRef = doc(collection(db, 'fatosObservados'));
+        batch.set(newDocRef, foData);
       }
+
+      // Commit all FOs in a single batch operation
+      await batch.commit();
 
       // Show success
       form.classList.add('hidden');
@@ -491,6 +652,123 @@ function setupFOFormEvents() {
     } finally {
       submitBtn.disabled = false;
       submitBtn.innerHTML = `${icons.check}<span>Registrar Ocorrência</span>`;
+    }
+  });
+
+  // First Access Modal Events
+  setupFirstAccessModal();
+}
+
+/**
+ * Setup First Access Modal events
+ */
+function setupFirstAccessModal() {
+  const modal = document.getElementById('first-access-modal');
+  const firstAccessLink = document.getElementById('first-access-link');
+  const closeBtn = document.getElementById('close-modal-btn');
+  const cancelBtn = document.getElementById('cancel-register-btn');
+  const overlay = modal.querySelector('.fo-modal__overlay');
+  const registerForm = document.getElementById('first-access-form');
+  const errorDiv = document.getElementById('register-error');
+  const errorMsg = document.getElementById('register-error-message');
+  const successDiv = document.getElementById('register-success');
+
+  // Open modal
+  firstAccessLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    modal.classList.remove('hidden');
+    errorDiv.classList.add('hidden');
+    successDiv.classList.add('hidden');
+    registerForm.reset();
+  });
+
+  // Close modal functions
+  const closeModal = () => {
+    modal.classList.add('hidden');
+    registerForm.reset();
+    errorDiv.classList.add('hidden');
+    successDiv.classList.add('hidden');
+  };
+
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', closeModal);
+
+  // Registration form submit
+  registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const usuario = document.getElementById('new-usuario').value.trim();
+    const senha = document.getElementById('new-senha').value.trim();
+    const confirmSenha = document.getElementById('confirm-senha').value.trim();
+    const nomeCompleto = document.getElementById('new-nome').value.trim();
+
+    // Hide previous messages
+    errorDiv.classList.add('hidden');
+    successDiv.classList.add('hidden');
+
+    // Validate passwords match
+    if (senha !== confirmSenha) {
+      errorMsg.textContent = 'As senhas não coincidem.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+
+    if (senha.length < 4) {
+      errorMsg.textContent = 'A senha deve ter pelo menos 4 caracteres.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+
+    const registerBtn = document.getElementById('register-btn');
+    registerBtn.disabled = true;
+    registerBtn.innerHTML = '<span class="spinner"></span> Cadastrando...';
+
+    try {
+      // Check if user already exists
+      const q = query(
+        collection(db, 'foRegistradores'),
+        where('usuario', '==', usuario)
+      );
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        errorMsg.textContent = 'Este usuário já está cadastrado. Use outro nome de usuário.';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
+      // Save new registrador
+      const docId = usuario.replace(/[^a-zA-Z0-9]/g, '_');
+      await setDoc(doc(db, 'foRegistradores', docId), {
+        usuario,
+        senha,
+        nomeCompleto: nomeCompleto || usuario,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        autoCadastro: true // Flag to identify self-registered users
+      });
+
+      // Show success
+      successDiv.classList.remove('hidden');
+      registerForm.reset();
+
+      // Auto-fill the login fields
+      document.getElementById('auth-usuario').value = usuario;
+      document.getElementById('auth-senha').value = senha;
+
+      // Close modal after 2 seconds
+      setTimeout(() => {
+        closeModal();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error registering:', error);
+      errorMsg.textContent = 'Erro ao cadastrar. Tente novamente.';
+      errorDiv.classList.remove('hidden');
+    } finally {
+      registerBtn.disabled = false;
+      registerBtn.innerHTML = `${icons.check} Cadastrar`;
     }
   });
 }

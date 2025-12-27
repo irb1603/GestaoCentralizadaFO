@@ -159,8 +159,8 @@ export async function renderAdminPage() {
                 <input type="text" class="form-input" id="registrador-usuario" placeholder="Ex: Prof.Silva" required>
               </div>
               <div class="form-group" style="margin-bottom: 0;">
-                <label class="form-label form-label--required">Palavra Passe</label>
-                <input type="text" class="form-input" id="registrador-senha" placeholder="Digite a senha" required>
+                <label class="form-label form-label--required">Senha</label>
+                <input type="password" class="form-input" id="registrador-senha" placeholder="Digite a senha" required>
               </div>
               <div class="form-group" style="margin-bottom: 0;">
                 <label class="form-label">Nome Completo</label>
@@ -402,13 +402,19 @@ export async function renderAdminPage() {
         </div>
         <div class="card__body">
           <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
-            Veja as últimas conversas dos usuários com o assistente de IA.
+            Selecione um usuário para ver suas conversas com o assistente de IA.
           </p>
           
-          <div id="ai-logs-container">
-            <button class="btn btn--secondary" id="load-ai-logs-btn">
-              ${icons.refresh} Carregar Histórico
-            </button>
+          <div class="form-group" style="max-width: 300px;">
+            <label class="form-label">Selecionar Usuário</label>
+            <select class="form-select" id="ai-logs-user">
+              <option value="">Selecione um usuário...</option>
+              ${users.map(u => `<option value="${u}">${u}</option>`).join('')}
+            </select>
+          </div>
+          
+          <div id="ai-logs-container" style="margin-top: var(--space-4);">
+            <p style="color: var(--text-tertiary); text-align: center; padding: var(--space-4);">Selecione um usuário acima para ver o histórico.</p>
           </div>
         </div>
       </div>
@@ -1302,10 +1308,16 @@ async function setupAIConfig() {
   // Load existing configs
   await loadAIConfigs();
 
-  // Setup AI logs button
-  const logsBtn = document.getElementById('load-ai-logs-btn');
-  if (logsBtn) {
-    logsBtn.addEventListener('click', loadAILogs);
+  // Setup AI logs user selector
+  const userSelector = document.getElementById('ai-logs-user');
+  if (userSelector) {
+    userSelector.addEventListener('change', (e) => {
+      if (e.target.value) {
+        loadAILogs(e.target.value);
+      } else {
+        document.getElementById('ai-logs-container').innerHTML = '<p style="color: var(--text-tertiary); text-align: center; padding: var(--space-4);">Selecione um usuário acima para ver o histórico.</p>';
+      }
+    });
   }
 }
 
@@ -1449,12 +1461,17 @@ async function testAIConnection() {
   }
 }
 
-async function loadAILogs() {
+async function loadAILogs(selectedUser) {
   const container = document.getElementById('ai-logs-container');
   container.innerHTML = '<div style="display: flex; justify-content: center; padding: var(--space-4);"><span class="spinner"></span></div>';
 
   try {
-    const q = query(collection(db, 'aiConversations'), orderBy('timestamp', 'desc'));
+    // Query logs filtered by user
+    const q = query(
+      collection(db, 'aiConversations'),
+      where('username', '==', selectedUser),
+      orderBy('timestamp', 'desc')
+    );
     const snapshot = await getDocs(q);
     const logs = snapshot.docs.slice(0, 50).map(doc => ({ id: doc.id, ...doc.data() }));
 

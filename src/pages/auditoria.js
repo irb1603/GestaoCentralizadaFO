@@ -49,7 +49,12 @@ export async function renderAuditoriaPage() {
             <option value="delete">Exclusão</option>
           </select>
           
-          <button class="btn btn--ghost btn--sm" id="refresh-logs">
+          <button class="btn btn--primary btn--sm" id="load-logs-btn">
+            ${icons.download}
+            <span>Carregar Registros</span>
+          </button>
+          
+          <button class="btn btn--ghost btn--sm" id="refresh-logs" style="display: none;">
             ${icons.refresh}
             <span>Atualizar</span>
           </button>
@@ -60,31 +65,50 @@ export async function renderAuditoriaPage() {
     <!-- Audit Logs -->
     <div class="card">
       <div class="card__body" id="audit-list-container" style="padding: 0;">
-        <div style="display: flex; justify-content: center; padding: 3rem;">
-          <span class="spinner spinner--lg"></span>
+        <div class="empty-state" style="padding: 3rem;">
+          <div class="empty-state__icon">${icons.audit}</div>
+          <div class="empty-state__title">Clique em "Carregar Registros"</div>
+          <div class="empty-state__description">
+            Os registros de auditoria serão carregados sob demanda para otimizar o desempenho.
+          </div>
         </div>
       </div>
     </div>
   `;
 
-  // Setup events
+  // Setup events (but DON'T auto-load - wait for user action)
   setupAuditEvents();
-
-  // Load audit logs
-  await loadAuditLogs();
 }
 
 let currentFilter = '';
+let currentLimit = 25; // Reduced from 100 to save reads
+let logsLoaded = false;
 
-async function loadAuditLogs() {
+async function loadAuditLogs(append = false) {
   const container = document.getElementById('audit-list-container');
+  const refreshBtn = document.getElementById('refresh-logs');
+  const loadBtn = document.getElementById('load-logs-btn');
+
+  // Show loading state
+  if (!append) {
+    container.innerHTML = `
+      <div style="display: flex; justify-content: center; padding: 3rem;">
+        <span class="spinner spinner--lg"></span>
+      </div>
+    `;
+  }
 
   try {
     const logs = await getAuditLogs({
       action: currentFilter || undefined,
-      limit: 100
+      limit: currentLimit
     });
 
+    logsLoaded = true;
+
+    // Show refresh button, hide load button
+    if (refreshBtn) refreshBtn.style.display = 'inline-flex';
+    if (loadBtn) loadBtn.style.display = 'none';
     if (logs.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
@@ -97,6 +121,8 @@ async function loadAuditLogs() {
       `;
       return;
     }
+
+    const hasMore = logs.length >= currentLimit;
 
     container.innerHTML = `
       <div class="table-container" style="border: none;">
@@ -116,7 +142,28 @@ async function loadAuditLogs() {
           </tbody>
         </table>
       </div>
+      ${hasMore ? `
+        <div style="padding: var(--space-4); text-align: center; border-top: 1px solid var(--border-light);">
+          <button class="btn btn--secondary btn--sm" id="load-more-btn">
+            ${icons.download}
+            <span>Carregar Mais (${currentLimit} registros)</span>
+          </button>
+        </div>
+      ` : `
+        <div style="padding: var(--space-3); text-align: center; color: var(--text-tertiary); font-size: var(--font-size-sm);">
+          Mostrando todos os ${logs.length} registros
+        </div>
+      `}
     `;
+
+    // Setup load more button
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    if (loadMoreBtn) {
+      loadMoreBtn.addEventListener('click', () => {
+        currentLimit += 25;
+        loadAuditLogs();
+      });
+    }
 
   } catch (error) {
     console.error('Error loading audit logs:', error);
@@ -186,11 +233,22 @@ function renderAuditRow(log) {
 function setupAuditEvents() {
   const filterSelect = document.getElementById('filter-action');
   const refreshBtn = document.getElementById('refresh-logs');
+  const loadBtn = document.getElementById('load-logs-btn');
+
+  // Load button - initial load on demand
+  if (loadBtn) {
+    loadBtn.addEventListener('click', () => {
+      loadAuditLogs();
+    });
+  }
 
   if (filterSelect) {
     filterSelect.addEventListener('change', (e) => {
       currentFilter = e.target.value;
-      loadAuditLogs();
+      currentLimit = 25; // Reset limit on filter change
+      if (logsLoaded) {
+        loadAuditLogs();
+      }
     });
   }
 

@@ -354,16 +354,35 @@ function processStats(fos, students) {
   // Count FOs per student
   const studentStats = {};
   fos.forEach(fo => {
-    if (!studentStats[fo.studentNumber]) {
-      studentStats[fo.studentNumber] = {
-        negativos: 0,
-        positivos: 0,
-        student: students.find(s => s.numero == fo.studentNumber) || { nome: 'Aluno Desconhecido', numero: fo.studentNumber, turma: '?' }
-      };
-    }
-    if (fo.tipo === TIPO_FATO.NEGATIVO) studentStats[fo.studentNumber].negativos++;
-    if (fo.tipo === TIPO_FATO.POSITIVO) studentStats[fo.studentNumber].positivos++;
+    // Get student numbers from the FO (it's stored as an array)
+    const studentNumbers = fo.studentNumbers || [];
+
+    studentNumbers.forEach(studentNumber => {
+      if (!studentStats[studentNumber]) {
+        // Find student info - first try from allStudents, then from FO's studentInfo
+        let student = students.find(s => s.numero == studentNumber);
+
+        if (!student) {
+          // Try to get from FO's studentInfo array
+          const foStudentInfo = fo.studentInfo?.find(si => si.numero == studentNumber);
+          student = foStudentInfo ? {
+            nome: foStudentInfo.nome || 'Aluno Desconhecido',
+            numero: studentNumber,
+            turma: foStudentInfo.turma || '?'
+          } : { nome: 'Aluno Desconhecido', numero: studentNumber, turma: '?' };
+        }
+
+        studentStats[studentNumber] = {
+          negativos: 0,
+          positivos: 0,
+          student: student
+        };
+      }
+      if (fo.tipo === TIPO_FATO.NEGATIVO) studentStats[studentNumber].negativos++;
+      if (fo.tipo === TIPO_FATO.POSITIVO) studentStats[studentNumber].positivos++;
+    });
   });
+
 
   const topNegativos = Object.values(studentStats)
     .sort((a, b) => b.negativos - a.negativos)

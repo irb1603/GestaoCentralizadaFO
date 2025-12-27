@@ -4,33 +4,39 @@
 import { getSession, canEdit, isAdmin, getCompanyFilter } from '../firebase/auth.js';
 import { db } from '../firebase/config.js';
 import {
-    collection,
-    getDocs,
-    doc,
-    updateDoc,
-    deleteDoc,
-    setDoc,
-    getDoc,
-    query,
-    where
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+  setDoc,
+  getDoc,
+  query,
+  where
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
-    COMPANY_NAMES,
-    COMPANY_SHORT_NAMES,
-    getWhatsAppLink,
-    formatPhone
+  COMPANY_NAMES,
+  COMPANY_SHORT_NAMES,
+  getWhatsAppLink,
+  formatPhone
 } from '../constants/index.js';
 import { icons } from '../utils/icons.js';
+import {
+  getCachedStudentList,
+  cacheStudentList,
+  invalidateStudentCache
+} from '../services/cacheService.js';
 
 let allStudents = [];
 let currentEditStudent = null;
 
 export async function renderDadosAlunosPage() {
-    const pageContent = document.getElementById('page-content');
-    const session = getSession();
-    const companyFilter = getCompanyFilter();
+  const pageContent = document.getElementById('page-content');
+  const session = getSession();
+  const companyFilter = getCompanyFilter();
 
-    pageContent.innerHTML = `
+  pageContent.innerHTML = `
     <div class="page-header">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-4);">
         <div>
@@ -52,16 +58,26 @@ export async function renderDadosAlunosPage() {
     <div class="card" style="margin-bottom: var(--space-4);">
       <div class="card__body" style="padding: var(--space-4);">
         <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center;">
-          <div style="flex: 1; min-width: 250px; position: relative;">
+          ${isAdmin() ? `
+          <select class="form-select" id="filter-company" style="width: auto; min-width: 180px;">
+            <option value="">Todas as companhias</option>
+            ${Object.entries(COMPANY_NAMES).map(([key, name]) => `<option value="${key}">${name}</option>`).join('')}
+          </select>
+          ` : ''}
+          <div style="flex: 1; min-width: 200px; position: relative;">
             <input type="text" class="form-input" id="search-aluno" 
-                   placeholder="Buscar por número, nome ou turma..." 
+                   placeholder="Digite o número do aluno..." 
                    style="padding-left: 40px;">
             <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary);">
               ${icons.search}
             </span>
           </div>
+          <button class="btn btn--primary" id="search-btn">
+            ${icons.search}
+            <span>Buscar</span>
+          </button>
           <div style="display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--font-size-sm);">
-            <span id="student-count">0</span> alunos
+            <span id="student-count">0</span> aluno(s)
           </div>
         </div>
       </div>
@@ -69,8 +85,16 @@ export async function renderDadosAlunosPage() {
     
     <!-- Students Grid -->
     <div id="students-grid" class="students-grid">
-      <div style="display: flex; justify-content: center; padding: 3rem; grid-column: 1 / -1;">
-        <span class="spinner spinner--lg"></span>
+      <div style="grid-column: 1 / -1;">
+        <div class="card">
+          <div class="card__body">
+            <div class="empty-state">
+              <div class="empty-state__icon">${icons.search}</div>
+              <div class="empty-state__title">Buscar Aluno</div>
+              <div class="empty-state__text">Digite o número do aluno para visualizar seus dados</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -317,77 +341,87 @@ export async function renderDadosAlunosPage() {
     </style>
   `;
 
-    // Setup events
-    setupDadosAlunosEvents();
+  // Setup events
+  setupDadosAlunosEvents();
 
-    // Load students
-    await loadStudentsData();
+  // DON'T load data automatically - wait for search
+  // This reduces initial reads from ~2600 to 0
 }
 
-async function loadStudentsData(searchTerm = '') {
-    const container = document.getElementById('students-grid');
-    const countEl = document.getElementById('student-count');
-    const companyFilter = getCompanyFilter();
+async function loadStudentsData(studentNumber = '', forceRefresh = false) {
+  const container = document.getElementById('students-grid');
+  const countEl = document.getElementById('student-count');
+  const companyFilter = getCompanyFilter();
+  const adminCompanySelect = document.getElementById('filter-company');
+  const selectedCompany = adminCompanySelect?.value || companyFilter;
 
-    try {
-        let q;
-        if (companyFilter) {
-            q = query(collection(db, 'students'), where('company', '==', companyFilter));
-        } else {
-            q = query(collection(db, 'students'));
-        }
+  // Require student number to search
+  if (!studentNumber || studentNumber.trim() === '') {
+    container.innerHTML = `
+      <div style="grid-column: 1 / -1;">
+        <div class="card">
+          <div class="card__body">
+            <div class="empty-state">
+              <div class="empty-state__icon">${icons.search}</div>
+              <div class="empty-state__title">Buscar Aluno</div>
+              <div class="empty-state__text">Digite o número do aluno para visualizar seus dados</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    countEl.textContent = '0';
+    return;
+  }
 
-        const snapshot = await getDocs(q);
-        allStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  // Show loading
+  container.innerHTML = `
+    <div style="display: flex; justify-content: center; padding: 3rem; grid-column: 1 / -1;">
+      <span class="spinner spinner--lg"></span>
+    </div>
+  `;
 
-        // Sort by turma then numero
-        allStudents.sort((a, b) => {
-            const turmaCompare = String(a.turma || '').localeCompare(String(b.turma || ''));
-            if (turmaCompare !== 0) return turmaCompare;
-            return (a.numero || 0) - (b.numero || 0);
-        });
+  try {
+    // Query by student number - VERY efficient: just 1 read!
+    let constraints = [where('numero', '==', parseInt(studentNumber))];
 
-        // Apply search filter
-        let filteredStudents = allStudents;
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            filteredStudents = allStudents.filter(s =>
-                String(s.numero).includes(term) ||
-                s.nome?.toLowerCase().includes(term) ||
-                String(s.turma).includes(term)
-            );
-        }
+    if (selectedCompany) {
+      constraints.push(where('company', '==', selectedCompany));
+    }
 
-        countEl.textContent = filteredStudents.length;
+    const q = query(collection(db, 'students'), ...constraints);
+    const snapshot = await getDocs(q);
+    const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (filteredStudents.length === 0) {
-            container.innerHTML = `
+    allStudents = students;
+    countEl.textContent = students.length;
+
+    if (students.length === 0) {
+      container.innerHTML = `
         <div style="grid-column: 1 / -1;">
           <div class="card">
             <div class="card__body">
               <div class="empty-state">
                 <div class="empty-state__icon">${icons.users}</div>
-                <div class="empty-state__title">Nenhum aluno encontrado</div>
-                <div class="empty-state__description">
-                  ${searchTerm ? 'Tente uma busca diferente.' : 'Adicione alunos manualmente ou importe via CSV.'}
-                </div>
+                <div class="empty-state__title">Aluno não encontrado</div>
+                <div class="empty-state__text">Verifique o número e tente novamente</div>
               </div>
             </div>
           </div>
         </div>
       `;
-            return;
-        }
+      return;
+    }
 
-        // Render student cards
-        container.innerHTML = filteredStudents.map(student => renderStudentCard(student)).join('');
+    // Render student cards
+    container.innerHTML = students.map(student => renderStudentCard(student)).join('');
 
-        // Setup card actions
-        setupCardActions();
+    // Setup card actions
+    setupCardActions();
 
-    } catch (error) {
-        console.error('Error loading students:', error);
-        container.innerHTML = `
+  } catch (error) {
+    console.error('Error loading students:', error);
+    container.innerHTML = `
       <div style="grid-column: 1 / -1;">
         <div class="alert alert--danger">
           <div class="alert__icon">${icons.warning}</div>
@@ -397,19 +431,19 @@ async function loadStudentsData(searchTerm = '') {
         </div>
       </div>
     `;
-    }
+  }
 }
 
 function renderStudentCard(student) {
-    const hasPhoto = student.fotoUrl;
-    const telResp = student.telefoneResponsavel || '';
-    const telAluno = student.telefoneAluno || '';
+  const hasPhoto = student.fotoUrl;
+  const telResp = student.telefoneResponsavel || '';
+  const telAluno = student.telefoneAluno || '';
 
-    return `
+  return `
     <div class="student-card" data-id="${student.id}">
       <div class="student-card__photo">
         ${hasPhoto ? `
-          <img src="${student.fotoUrl}" alt="${student.nome}">
+          <img src="${student.fotoUrl}" alt="${student.nome}" loading="lazy">
         ` : `
           <div class="student-card__photo-placeholder">
             ${icons.users}
@@ -467,206 +501,274 @@ function renderStudentCard(student) {
 }
 
 function setupDadosAlunosEvents() {
-    const searchInput = document.getElementById('search-aluno');
-    const addBtn = document.getElementById('add-aluno-btn');
-    const modal = document.getElementById('aluno-modal');
-    const backdrop = document.getElementById('aluno-modal-backdrop');
-    const closeBtn = document.getElementById('modal-close');
-    const cancelBtn = document.getElementById('modal-cancel');
-    const form = document.getElementById('aluno-form');
-    const photoInput = document.getElementById('photo-input');
+  const searchInput = document.getElementById('search-aluno');
+  const searchBtn = document.getElementById('search-btn');
+  const addBtn = document.getElementById('add-aluno-btn');
+  const modal = document.getElementById('aluno-modal');
+  const backdrop = document.getElementById('aluno-modal-backdrop');
+  const closeBtn = document.getElementById('modal-close');
+  const cancelBtn = document.getElementById('modal-cancel');
+  const form = document.getElementById('aluno-form');
+  const photoInput = document.getElementById('photo-input');
 
-    // Search
-    if (searchInput) {
-        let debounce;
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(debounce);
-            debounce = setTimeout(() => loadStudentsData(e.target.value), 300);
-        });
-    }
-
-    // Add button
-    if (addBtn) {
-        addBtn.addEventListener('click', () => openModal());
-    }
-
-    // Modal close
-    [closeBtn, cancelBtn, backdrop].forEach(el => {
-        if (el) el.addEventListener('click', closeModal);
+  // Search button click
+  if (searchBtn) {
+    searchBtn.addEventListener('click', () => {
+      loadStudentsData(searchInput.value.trim());
     });
+  }
 
-    // Form submit
-    if (form) {
-        form.addEventListener('submit', handleFormSubmit);
-    }
+  // Enter key on search input
+  if (searchInput) {
+    searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loadStudentsData(searchInput.value.trim());
+      }
+    });
+  }
 
-    // Photo preview
-    if (photoInput) {
-        photoInput.addEventListener('change', handlePhotoChange);
-    }
+  // Add button
+  if (addBtn) {
+    addBtn.addEventListener('click', () => openModal());
+  }
+
+  // Modal close
+  [closeBtn, cancelBtn, backdrop].forEach(el => {
+    if (el) el.addEventListener('click', closeModal);
+  });
+
+  // Form submit
+  if (form) {
+    form.addEventListener('submit', handleFormSubmit);
+  }
+
+  // Photo preview
+  if (photoInput) {
+    photoInput.addEventListener('change', handlePhotoChange);
+  }
 }
 
 function setupCardActions() {
-    // Edit buttons
-    document.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.currentTarget.dataset.id;
-            const student = allStudents.find(s => s.id === id);
-            if (student) openModal(student);
-        });
+  // Edit buttons
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = e.currentTarget.dataset.id;
+      const student = allStudents.find(s => s.id === id);
+      if (student) openModal(student);
     });
+  });
 
-    // Delete buttons
-    document.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const id = e.currentTarget.dataset.id;
-            const student = allStudents.find(s => s.id === id);
+  // Delete buttons
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      const student = allStudents.find(s => s.id === id);
 
-            if (confirm(`Deseja realmente excluir o aluno ${student?.nome || id}?`)) {
-                try {
-                    await deleteDoc(doc(db, 'students', id));
-                    showToast('Aluno excluído com sucesso', 'success');
-                    loadStudentsData(document.getElementById('search-aluno')?.value || '');
-                } catch (error) {
-                    console.error('Error deleting:', error);
-                    showToast('Erro ao excluir aluno', 'error');
-                }
-            }
-        });
+      if (confirm(`Deseja realmente excluir o aluno ${student?.nome || id}?`)) {
+        try {
+          await deleteDoc(doc(db, 'students', id));
+          invalidateStudentCache(student?.numero); // Invalidate cache
+          showToast('Aluno excluído com sucesso', 'success');
+          loadStudentsData(document.getElementById('search-aluno')?.value || '', true);
+        } catch (error) {
+          console.error('Error deleting:', error);
+          showToast('Erro ao excluir aluno', 'error');
+        }
+      }
     });
+  });
 }
 
 function openModal(student = null) {
-    currentEditStudent = student;
-    const modal = document.getElementById('aluno-modal');
-    const backdrop = document.getElementById('aluno-modal-backdrop');
-    const title = document.getElementById('modal-title');
-    const photoPreview = document.getElementById('photo-preview');
+  currentEditStudent = student;
+  const modal = document.getElementById('aluno-modal');
+  const backdrop = document.getElementById('aluno-modal-backdrop');
+  const title = document.getElementById('modal-title');
+  const photoPreview = document.getElementById('photo-preview');
 
-    // Reset form
-    document.getElementById('aluno-id').value = student?.id || '';
-    document.getElementById('aluno-numero').value = student?.numero || '';
-    document.getElementById('aluno-turma').value = student?.turma || '';
-    document.getElementById('aluno-nome').value = student?.nome || '';
-    document.getElementById('aluno-email').value = student?.emailResponsavel || '';
-    document.getElementById('aluno-tel-resp').value = student?.telefoneResponsavel || '';
-    document.getElementById('aluno-tel-aluno').value = student?.telefoneAluno || '';
+  // Reset form
+  document.getElementById('aluno-id').value = student?.id || '';
+  document.getElementById('aluno-numero').value = student?.numero || '';
+  document.getElementById('aluno-turma').value = student?.turma || '';
+  document.getElementById('aluno-nome').value = student?.nome || '';
+  document.getElementById('aluno-email').value = student?.emailResponsavel || '';
+  document.getElementById('aluno-tel-resp').value = student?.telefoneResponsavel || '';
+  document.getElementById('aluno-tel-aluno').value = student?.telefoneAluno || '';
 
-    // Photo preview
-    if (student?.fotoUrl) {
-        photoPreview.innerHTML = `<img src="${student.fotoUrl}" alt="${student.nome}">`;
-    } else {
-        photoPreview.innerHTML = `
+  // Photo preview
+  if (student?.fotoUrl) {
+    photoPreview.innerHTML = `<img src="${student.fotoUrl}" alt="${student.nome}">`;
+  } else {
+    photoPreview.innerHTML = `
       <div class="student-photo-placeholder">
         ${icons.camera}
         <span>Foto</span>
       </div>
     `;
-    }
+  }
 
-    // Disable numero field if editing
-    document.getElementById('aluno-numero').disabled = !!student;
+  // Disable numero field if editing
+  document.getElementById('aluno-numero').disabled = !!student;
 
-    title.textContent = student ? 'Editar Aluno' : 'Novo Aluno';
+  title.textContent = student ? 'Editar Aluno' : 'Novo Aluno';
 
-    modal.classList.add('active');
-    backdrop.classList.add('active');
+  modal.classList.add('active');
+  backdrop.classList.add('active');
 }
 
 function closeModal() {
-    document.getElementById('aluno-modal').classList.remove('active');
-    document.getElementById('aluno-modal-backdrop').classList.remove('active');
-    document.getElementById('aluno-numero').disabled = false;
-    currentEditStudent = null;
+  document.getElementById('aluno-modal').classList.remove('active');
+  document.getElementById('aluno-modal-backdrop').classList.remove('active');
+  document.getElementById('aluno-numero').disabled = false;
+  currentEditStudent = null;
 }
 
 function handlePhotoChange(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  const file = e.target.files[0];
+  if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        const photoPreview = document.getElementById('photo-preview');
-        photoPreview.innerHTML = `<img src="${event.target.result}" alt="Preview">`;
-    };
-    reader.readAsDataURL(file);
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const photoPreview = document.getElementById('photo-preview');
+    photoPreview.innerHTML = `<img src="${event.target.result}" alt="Preview">`;
+  };
+  reader.readAsDataURL(file);
 }
 
 async function handleFormSubmit(e) {
-    e.preventDefault();
+  e.preventDefault();
 
-    const id = document.getElementById('aluno-id').value;
-    const numero = parseInt(document.getElementById('aluno-numero').value);
-    const turma = document.getElementById('aluno-turma').value.trim();
-    const nome = document.getElementById('aluno-nome').value.trim().toUpperCase();
-    const emailResponsavel = document.getElementById('aluno-email').value.trim();
-    const telefoneResponsavel = document.getElementById('aluno-tel-resp').value.trim();
-    const telefoneAluno = document.getElementById('aluno-tel-aluno').value.trim();
+  const id = document.getElementById('aluno-id').value;
+  const numero = parseInt(document.getElementById('aluno-numero').value);
+  const turma = document.getElementById('aluno-turma').value.trim();
+  const nome = document.getElementById('aluno-nome').value.trim().toUpperCase();
+  const emailResponsavel = document.getElementById('aluno-email').value.trim();
+  const telefoneResponsavel = document.getElementById('aluno-tel-resp').value.trim();
+  const telefoneAluno = document.getElementById('aluno-tel-aluno').value.trim();
 
-    // Get company from turma
-    const turmaPrefix = turma.charAt(0);
-    const companyMap = { '6': '6cia', '7': '7cia', '8': '8cia', '9': '9cia', '1': '1cia', '2': '2cia', '3': '3cia' };
-    const company = companyMap[turmaPrefix] || '';
+  // Get company from turma
+  const turmaPrefix = turma.charAt(0);
+  const companyMap = { '6': '6cia', '7': '7cia', '8': '8cia', '9': '9cia', '1': '1cia', '2': '2cia', '3': '3cia' };
+  const company = companyMap[turmaPrefix] || '';
 
-    const data = {
-        numero,
-        turma,
-        nome,
-        company,
-        emailResponsavel,
-        telefoneResponsavel,
-        telefoneAluno,
-        updatedAt: new Date().toISOString()
-    };
+  const data = {
+    numero,
+    turma,
+    nome,
+    company,
+    emailResponsavel,
+    telefoneResponsavel,
+    telefoneAluno,
+    updatedAt: new Date().toISOString()
+  };
 
-    // Keep existing photo URL if not changed
-    if (currentEditStudent?.fotoUrl) {
-        data.fotoUrl = currentEditStudent.fotoUrl;
-    }
+  // Keep existing photo URL if not changed
+  if (currentEditStudent?.fotoUrl) {
+    data.fotoUrl = currentEditStudent.fotoUrl;
+  }
 
-    // Handle photo upload (base64 for now - in production use Firebase Storage)
+  const saveBtn = document.getElementById('modal-save');
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner"></span> Salvando...';
+
+  try {
+    // Handle photo upload to Firebase Storage (not Base64)
     const photoInput = document.getElementById('photo-input');
     if (photoInput.files[0]) {
-        const reader = new FileReader();
-        const photoData = await new Promise((resolve) => {
-            reader.onload = (e) => resolve(e.target.result);
-            reader.readAsDataURL(photoInput.files[0]);
-        });
-        data.fotoUrl = photoData;
+      const file = photoInput.files[0];
+
+      // Compress image before upload
+      const compressedFile = await compressImage(file, 800, 0.7);
+
+      // Upload to Firebase Storage
+      const storage = getStorage();
+      const filename = `fotos-alunos/${numero}/foto_${Date.now()}.jpg`;
+      const storageRef = ref(storage, filename);
+
+      await uploadBytes(storageRef, compressedFile);
+      data.fotoUrl = await getDownloadURL(storageRef);
     }
 
-    const saveBtn = document.getElementById('modal-save');
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<span class="spinner"></span> Salvando...';
+    const docId = id || String(numero);
+    await setDoc(doc(db, 'students', docId), data, { merge: true });
 
-    try {
-        const docId = id || String(numero);
-        await setDoc(doc(db, 'students', docId), data, { merge: true });
+    invalidateStudentCache(numero); // Invalidate cache
+    showToast(id ? 'Aluno atualizado com sucesso' : 'Aluno cadastrado com sucesso', 'success');
+    closeModal();
+    loadStudentsData(document.getElementById('search-aluno')?.value || '', true);
+  } catch (error) {
+    console.error('Error saving:', error);
+    showToast('Erro ao salvar aluno', 'error');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = 'Salvar';
+  }
+}
 
-        showToast(id ? 'Aluno atualizado com sucesso' : 'Aluno cadastrado com sucesso', 'success');
-        closeModal();
-        loadStudentsData(document.getElementById('search-aluno')?.value || '');
-    } catch (error) {
-        console.error('Error saving:', error);
-        showToast('Erro ao salvar aluno', 'error');
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = 'Salvar';
-    }
+/**
+ * Compress image before upload to reduce storage and bandwidth
+ * @param {File} file - Original image file
+ * @param {number} maxSize - Maximum width/height in pixels
+ * @param {number} quality - JPEG quality (0-1)
+ * @returns {Promise<Blob>} - Compressed image blob
+ */
+async function compressImage(file, maxSize = 800, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+      // Calculate new dimensions
+      let { width, height } = img;
+
+      if (width > height) {
+        if (width > maxSize) {
+          height = (height * maxSize) / width;
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = (width * maxSize) / height;
+          height = maxSize;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw and compress
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to compress image'));
+          }
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast toast--${type}`;
-    toast.innerHTML = `<span>${message}</span>`;
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${type}`;
+  toast.innerHTML = `<span>${message}</span>`;
 
-    let container = document.querySelector('.toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.className = 'toast-container';
-        document.body.appendChild(container);
-    }
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
 
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
 }

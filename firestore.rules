@@ -90,5 +90,19 @@ service cloud.firestore {
     match /faltasEscolares/{faltaId} {
       allow read, write: if true;
     }
+    
+    // -----------------------------------------
+    // COLEÇÕES DE IA
+    // -----------------------------------------
+    
+    // Configurações de API keys do Gemini por companhia
+    match /aiConfigs/{configId} {
+      allow read, write: if true;
+    }
+    
+    // Histórico de conversas com o assistente de IA
+    match /aiConversations/{conversationId} {
+      allow read, write: if true;
+    }
   }
 }

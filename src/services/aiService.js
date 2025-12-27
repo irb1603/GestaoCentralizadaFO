@@ -197,6 +197,13 @@ async function gatherContextData(userQuery) {
         contextData.comportamento = await getComportamentoStats(companyFilter);
     }
 
+    // FOs Pedagógicos (only for Cmt Cia - company filter must be set)
+    if ((lowerQuery.includes('pedagógic') || lowerQuery.includes('pedagogic') || lowerQuery.includes('aprendizado') ||
+        lowerQuery.includes('aula') || lowerQuery.includes('livro') || lowerQuery.includes('tarefa') ||
+        lowerQuery.includes('dever') || lowerQuery.includes('trabalho')) && companyFilter) {
+        contextData.pedagogicos = await getPedagogicalFOs(companyFilter);
+    }
+
     return contextData;
 }
 
@@ -454,6 +461,96 @@ async function getComportamentoStats(companyFilter) {
 }
 
 /**
+ * KEYWORDS for pedagogical FO detection
+ */
+const PEDAGOGICAL_KEYWORDS = [
+    'livro', 'esqueceu o livro', 'sem livro', 'não trouxe o livro',
+    'tarefa', 'dever de casa', 'não fez tarefa', 'sem tarefa', 'não fez o dever',
+    'trabalho', 'não entregou trabalho', 'sem trabalho',
+    'dormindo', 'dormiu na aula', 'dormindo em aula',
+    'atenção', 'desatento', 'não prestou atenção', 'disperso',
+    'material', 'sem material', 'esqueceu material',
+    'caderno', 'sem caderno', 'esqueceu caderno',
+    'conversa', 'conversando', 'atrapalhando aula',
+    'celular', 'usando celular', 'mexendo no celular'
+];
+
+/**
+ * Get pedagogical FOs (learning-related) for the week
+ * Only available to Cmt Cia for their company
+ */
+async function getPedagogicalFOs(companyFilter) {
+    const session = getSession();
+
+    // Only allow commanders to access this
+    if (!companyFilter || !['commander', 'admin'].includes(session?.role)) {
+        return null;
+    }
+
+    // Calculate week range
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    const weekStart = startOfWeek.toISOString().split('T')[0];
+
+    let q = query(
+        collection(db, 'fatosObservados'),
+        where('company', '==', companyFilter),
+        where('tipo', '==', 'negativo')
+    );
+
+    const snapshot = await getDocs(q);
+    const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Filter by date (this week) and pedagogical keywords
+    const pedagogicalFOs = fos.filter(fo => {
+        const dataRegistro = fo.dataRegistro || fo.dataFato;
+        if (dataRegistro < weekStart) return false;
+
+        const descricao = (fo.descricao || '').toLowerCase();
+        return PEDAGOGICAL_KEYWORDS.some(keyword => descricao.includes(keyword));
+    });
+
+    // Group by keyword category
+    const categories = {
+        livros: pedagogicalFOs.filter(fo =>
+            ['livro', 'esqueceu o livro', 'sem livro', 'não trouxe o livro'].some(k => (fo.descricao || '').toLowerCase().includes(k))
+        ),
+        tarefas: pedagogicalFOs.filter(fo =>
+            ['tarefa', 'dever', 'trabalho', 'não entregou'].some(k => (fo.descricao || '').toLowerCase().includes(k))
+        ),
+        atencao: pedagogicalFOs.filter(fo =>
+            ['dormindo', 'dormiu', 'atenção', 'desatento', 'disperso', 'celular'].some(k => (fo.descricao || '').toLowerCase().includes(k))
+        ),
+        material: pedagogicalFOs.filter(fo =>
+            ['material', 'caderno', 'sem caderno'].some(k => (fo.descricao || '').toLowerCase().includes(k))
+        ),
+        outros: []
+    };
+
+    // Get students info
+    const studentsData = pedagogicalFOs.map(fo => ({
+        numero: fo.studentNumbers?.[0],
+        nome: fo.studentInfo?.[0]?.nome || 'Desconhecido',
+        turma: fo.studentInfo?.[0]?.turma || '?',
+        descricao: fo.descricao?.substring(0, 100),
+        data: fo.dataRegistro || fo.dataFato
+    }));
+
+    return {
+        total: pedagogicalFOs.length,
+        semana: weekStart,
+        categories: {
+            livros: categories.livros.length,
+            tarefas: categories.tarefas.length,
+            atencao: categories.atencao.length,
+            material: categories.material.length
+        },
+        detalhes: studentsData.slice(0, 15) // Limit to 15 for context
+    };
+}
+
+/**
  * Format context data for AI prompt
  */
 function formatContextForPrompt(contextData) {
@@ -508,6 +605,22 @@ Justificado: ${contextData.sancoes.justificado}\n`;
         contextData.comportamento.alunos?.forEach((a, i) => {
             formatted += `${i + 1}. Nº ${a.numero} - ${a.nome}: ${a.notaAnterior} → ${a.notaAtual} (${a.variacao})\n`;
         });
+    }
+
+    if (contextData.pedagogicos) {
+        formatted += `\n=== FOs PEDAGÓGICOS DA SEMANA (${contextData.pedagogicos.semana}) ===\n`;
+        formatted += `Total: ${contextData.pedagogicos.total} ocorrências relacionadas ao aprendizado\n`;
+        formatted += `- Livros esquecidos: ${contextData.pedagogicos.categories?.livros || 0}\n`;
+        formatted += `- Tarefas/Trabalhos: ${contextData.pedagogicos.categories?.tarefas || 0}\n`;
+        formatted += `- Atenção/Celular: ${contextData.pedagogicos.categories?.atencao || 0}\n`;
+        formatted += `- Material escolar: ${contextData.pedagogicos.categories?.material || 0}\n\n`;
+
+        if (contextData.pedagogicos.detalhes?.length > 0) {
+            formatted += `Detalhes:\n`;
+            contextData.pedagogicos.detalhes.forEach((fo, i) => {
+                formatted += `${i + 1}. Nº ${fo.numero} (${fo.turma}) - ${fo.data}: ${fo.descricao}...\n`;
+            });
+        }
     }
 
     return formatted || 'Nenhum dado específico encontrado para esta consulta.';

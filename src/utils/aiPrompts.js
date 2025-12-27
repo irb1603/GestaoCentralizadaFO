@@ -201,5 +201,7 @@ export const SUGGESTED_QUERIES = [
     "O aluno usou celular em sala de aula. Qual o enquadramento?",
     "Quantos alunos estão de AOE hoje?",
     "Qual a estatística de sanções deste mês?",
-    "Quais alunos estão com comportamento caindo?"
+    "Quais alunos estão com comportamento caindo?",
+    "Quais são os FOs pedagógicos desta semana?"
 ];
+

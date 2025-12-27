@@ -59,18 +59,26 @@ export async function renderProcessoDisciplinarPage(container) {
       </div>
     </div>
     
-    <div class="search-bar">
-      <input type="text" id="search-aluno" placeholder="Buscar por número ou nome do aluno..." 
+    <div class="search-bar" style="display: flex; gap: var(--space-3); align-items: center;">
+      <input type="text" id="search-aluno" placeholder="Digite o número do aluno..." 
              style="flex: 1; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-light); border-radius: var(--radius-md);">
+      <button class="btn btn--primary" id="search-btn">
+        ${icons.search} Buscar
+      </button>
     </div>
     
-    <div class="page-loading">
-      <span class="spinner"></span> Carregando alunos...
-    </div>
-    
-    <div id="students-list" class="students-grid" style="display: none;"></div>
-    <div id="empty-state" class="empty-state" style="display: none;">
-      <p>Nenhum aluno com FO encontrado.</p>
+    <div id="students-list" class="students-grid" style="margin-top: var(--space-4);">
+      <div style="grid-column: 1 / -1;">
+        <div class="card">
+          <div class="card__body">
+            <div class="empty-state">
+              <div class="empty-state__icon">${icons.search}</div>
+              <div class="empty-state__title">Buscar Aluno</div>
+              <div class="empty-state__text">Digite o número do aluno para visualizar seu processo disciplinar</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -175,113 +183,130 @@ export async function renderProcessoDisciplinarPage(container) {
   let currentUploadStudent = null;
   let currentUploadType = 'termo'; // 'termo' or 'outros'
 
-  try {
-    // Load students with FOs
-    const fosQuery = query(
-      collection(db, 'fatosObservados'),
-      where('status', '!=', 'pendente')
-    );
-    const fosSnapshot = await getDocs(fosQuery);
+  // Search button click
+  const searchBtn = container.querySelector('#search-btn');
+  const searchInput = container.querySelector('#search-aluno');
 
-    // Group FOs by student
-    fosSnapshot.docs.forEach(doc => {
-      const fo = { id: doc.id, ...doc.data() };
-      const studentNumber = fo.studentNumbers?.[0];
-      if (studentNumber) {
-        if (!studentFOs[studentNumber]) {
-          studentFOs[studentNumber] = [];
-        }
-        studentFOs[studentNumber].push(fo);
-      }
-    });
+  async function searchStudent() {
+    const studentNumber = searchInput.value.trim();
+    const listContainer = container.querySelector('#students-list');
 
-    // Get unique student numbers
-    const studentNumbers = Object.keys(studentFOs).map(n => parseInt(n));
-
-    // Load student data
-    if (studentNumbers.length > 0) {
-      // Load in batches of 30
-      for (let i = 0; i < studentNumbers.length; i += 30) {
-        const batch = studentNumbers.slice(i, i + 30);
-        const studentsQuery = query(
-          collection(db, 'students'),
-          where('numero', 'in', batch)
-        );
-        const studentsSnapshot = await getDocs(studentsQuery);
-        studentsSnapshot.docs.forEach(doc => {
-          const student = { id: doc.id, ...doc.data() };
-          // Filter by company for non-admin/comandoCA users
-          if (canSeeStudent(student, session)) {
-            allStudents.push(student);
-          }
-        });
-      }
+    if (!studentNumber || isNaN(parseInt(studentNumber))) {
+      listContainer.innerHTML = `
+        <div style="grid-column: 1 / -1;">
+          <div class="card">
+            <div class="card__body">
+              <div class="empty-state">
+                <div class="empty-state__icon">${icons.search}</div>
+                <div class="empty-state__title">Buscar Aluno</div>
+                <div class="empty-state__text">Digite o número do aluno para visualizar seu processo disciplinar</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      return;
     }
 
-    // Load termos metadata
-    const termosQuery = query(collection(db, 'termosCiencia'));
-    const termosSnapshot = await getDocs(termosQuery);
-    termosSnapshot.docs.forEach(doc => {
-      const termo = { id: doc.id, ...doc.data() };
-      if (!studentTermos[termo.studentNumber]) {
-        studentTermos[termo.studentNumber] = [];
-      }
-      studentTermos[termo.studentNumber].push(termo);
-    });
-
-    // Load outros documentos
-    const outrosQuery = query(collection(db, 'outrosDocumentos'));
-    const outrosSnapshot = await getDocs(outrosQuery);
-    outrosSnapshot.docs.forEach(doc => {
-      const outro = { id: doc.id, ...doc.data() };
-      if (!studentOutrosDocs[outro.studentNumber]) {
-        studentOutrosDocs[outro.studentNumber] = [];
-      }
-      studentOutrosDocs[outro.studentNumber].push(outro);
-    });
-
-    // Hide loading
-    container.querySelector('.page-loading').style.display = 'none';
-
-    // Sort students by turma
-    allStudents.sort((a, b) => {
-      const turmaA = a.turma || '';
-      const turmaB = b.turma || '';
-      return turmaA.localeCompare(turmaB) || a.numero - b.numero;
-    });
-
-    // Render students
-    renderStudentsList(allStudents);
-
-    // Setup search
-    const searchInput = container.querySelector('#search-aluno');
-    let searchTimeout;
-    searchInput.addEventListener('input', () => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        const term = searchInput.value.toLowerCase();
-        const filtered = allStudents.filter(s =>
-          String(s.numero).includes(term) ||
-          s.nome?.toLowerCase().includes(term)
-        );
-        renderStudentsList(filtered);
-      }, 300);
-    });
-
-    // Setup Gerar Processo button
-    container.querySelector('#btn-gerar-processo').addEventListener('click', () => {
-      openProcessoModal();
-    });
-
-    // Setup file inputs
-    setupFileInputs();
-
-  } catch (error) {
-    console.error('Erro ao carregar dados:', error);
-    container.querySelector('.page-loading').innerHTML = `
-      <p style="color: var(--color-danger-500);">Erro ao carregar: ${error.message}</p>
+    // Show loading
+    listContainer.innerHTML = `
+      <div style="grid-column: 1 / -1; display: flex; justify-content: center; padding: 3rem;">
+        <span class="spinner spinner--lg"></span>
+      </div>
     `;
+
+    try {
+      const studentNum = parseInt(studentNumber);
+
+      // Reset data
+      allStudents = [];
+      studentFOs = {};
+      studentTermos = {};
+      studentOutrosDocs = {};
+
+      // Load FOs for this student only
+      const fosQuery = query(
+        collection(db, 'fatosObservados'),
+        where('studentNumbers', 'array-contains', studentNum)
+      );
+      const fosSnapshot = await getDocs(fosQuery);
+
+      fosSnapshot.docs.forEach(doc => {
+        const fo = { id: doc.id, ...doc.data() };
+        if (!studentFOs[studentNum]) {
+          studentFOs[studentNum] = [];
+        }
+        studentFOs[studentNum].push(fo);
+      });
+
+      // Load student data
+      const studentQuery = query(
+        collection(db, 'students'),
+        where('numero', '==', studentNum)
+      );
+      const studentSnapshot = await getDocs(studentQuery);
+      studentSnapshot.docs.forEach(doc => {
+        const student = { id: doc.id, ...doc.data() };
+        if (canSeeStudent(student, session)) {
+          allStudents.push(student);
+        }
+      });
+
+      // Load termos for this student
+      const termosQuery = query(
+        collection(db, 'termosCiencia'),
+        where('studentNumber', '==', studentNum)
+      );
+      const termosSnapshot = await getDocs(termosQuery);
+      termosSnapshot.docs.forEach(doc => {
+        const termo = { id: doc.id, ...doc.data() };
+        if (!studentTermos[termo.studentNumber]) {
+          studentTermos[termo.studentNumber] = [];
+        }
+        studentTermos[termo.studentNumber].push(termo);
+      });
+
+      // Load outros documentos for this student
+      const outrosQuery = query(
+        collection(db, 'outrosDocumentos'),
+        where('studentNumber', '==', studentNum)
+      );
+      const outrosSnapshot = await getDocs(outrosQuery);
+      outrosSnapshot.docs.forEach(doc => {
+        const outro = { id: doc.id, ...doc.data() };
+        if (!studentOutrosDocs[outro.studentNumber]) {
+          studentOutrosDocs[outro.studentNumber] = [];
+        }
+        studentOutrosDocs[outro.studentNumber].push(outro);
+      });
+
+      // Render student
+      renderStudentsList(allStudents);
+
+    } catch (error) {
+      console.error('Erro ao buscar aluno:', error);
+      listContainer.innerHTML = `
+        <div style="grid-column: 1 / -1;">
+          <div class="alert alert--danger">
+            <p>Erro ao buscar: ${error.message}</p>
+          </div>
+        </div>
+      `;
+    }
   }
+
+  searchBtn.addEventListener('click', searchStudent);
+  searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') searchStudent();
+  });
+
+  // Setup Gerar Processo button
+  container.querySelector('#btn-gerar-processo').addEventListener('click', () => {
+    openProcessoModal();
+  });
+
+  // Setup file inputs
+  setupFileInputs();
 
   // --- Helper Functions ---
 

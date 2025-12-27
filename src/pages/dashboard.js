@@ -1,16 +1,22 @@
 // Dashboard Page Component
 // Gestão Centralizada FO - CMB
 
-import { getSession, COMPANY_NAMES } from '../firebase/auth.js';
+import { getSession, COMPANY_NAMES, getCompanyFilter } from '../firebase/auth.js';
 import { getDashboardStats, getFatosObservados } from '../firebase/database.js';
 import { icons } from '../utils/icons.js';
+import {
+  getCachedStats,
+  cacheStats,
+  getCachedFOList,
+  cacheFOList
+} from '../services/cacheService.js';
 
 export async function renderDashboardPage() {
-    const session = getSession();
-    const pageContent = document.getElementById('page-content');
+  const session = getSession();
+  const pageContent = document.getElementById('page-content');
 
-    // Show loading
-    pageContent.innerHTML = `
+  // Show loading
+  pageContent.innerHTML = `
     <div class="page-header">
       <h1 class="page-header__title">Dashboard</h1>
       <p class="page-header__subtitle">
@@ -22,17 +28,43 @@ export async function renderDashboardPage() {
     </div>
   `;
 
-    try {
-        // Get stats
-        const stats = await getDashboardStats();
-        const recentFOs = await getFatosObservados({ limit: 5 });
+  try {
+    const companyFilter = getCompanyFilter() || 'all';
 
-        pageContent.innerHTML = `
+    // Try cache first for stats
+    let stats = getCachedStats(companyFilter);
+    let recentFOs = getCachedFOList(companyFilter, 'recent');
+
+    const fromCache = !!(stats && recentFOs);
+
+    // If not cached, fetch from Firebase
+    if (!stats) {
+      stats = await getDashboardStats();
+      cacheStats(stats, companyFilter);
+    }
+
+    if (!recentFOs) {
+      recentFOs = await getFatosObservados({ limit: 5 });
+      cacheFOList(recentFOs, companyFilter, 'recent');
+    }
+
+    pageContent.innerHTML = `
       <div class="page-header">
-        <h1 class="page-header__title">Dashboard</h1>
-        <p class="page-header__subtitle">
-          ${session.company ? COMPANY_NAMES[session.company] || session.company : 'Visão Geral - Todas as Companhias'}
-        </p>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-3);">
+          <div>
+            <h1 class="page-header__title">Dashboard</h1>
+            <p class="page-header__subtitle">
+              ${session.company ? COMPANY_NAMES[session.company] || session.company : 'Visão Geral - Todas as Companhias'}
+            </p>
+          </div>
+          <div style="display: flex; align-items: center; gap: var(--space-2);">
+            ${fromCache ? '<span style="font-size: var(--font-size-xs); color: var(--text-tertiary);">Dados em cache</span>' : ''}
+            <button class="btn btn--ghost btn--sm" id="refresh-dashboard-btn">
+              ${icons.refresh}
+              <span>Atualizar</span>
+            </button>
+          </div>
+        </div>
       </div>
       
       <!-- Stats Grid -->
@@ -167,9 +199,31 @@ export async function renderDashboardPage() {
         
       </div>
     `;
-    } catch (error) {
-        console.error('Error loading dashboard:', error);
-        pageContent.innerHTML = `
+
+    // Setup refresh button
+    const refreshBtn = document.getElementById('refresh-dashboard-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async () => {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<span class="spinner"></span>';
+
+        // Force fresh data by not using cache
+        const companyFilter = getCompanyFilter() || 'all';
+        const freshStats = await getDashboardStats();
+        const freshFOs = await getFatosObservados({ limit: 5 });
+
+        // Update cache
+        cacheStats(freshStats, companyFilter);
+        cacheFOList(freshFOs, companyFilter, 'recent');
+
+        // Re-render
+        await renderDashboardPage();
+      });
+    }
+
+  } catch (error) {
+    console.error('Error loading dashboard:', error);
+    pageContent.innerHTML = `
       <div class="page-header">
         <h1 class="page-header__title">Dashboard</h1>
       </div>
@@ -181,23 +235,23 @@ export async function renderDashboardPage() {
         </div>
       </div>
     `;
-    }
+  }
 }
 
 function getStatusColor(status) {
-    const colors = {
-        'pendente': 'warning',
-        'em_processo': 'primary',
-        'concluido': 'success'
-    };
-    return colors[status] || 'neutral';
+  const colors = {
+    'pendente': 'warning',
+    'em_processo': 'primary',
+    'concluido': 'success'
+  };
+  return colors[status] || 'neutral';
 }
 
 function getStatusLabel(status) {
-    const labels = {
-        'pendente': 'Pendente',
-        'em_processo': 'Em Processo',
-        'concluido': 'Concluído'
-    };
-    return labels[status] || status;
+  const labels = {
+    'pendente': 'Pendente',
+    'em_processo': 'Em Processo',
+    'concluido': 'Concluído'
+  };
+  return labels[status] || status;
 }

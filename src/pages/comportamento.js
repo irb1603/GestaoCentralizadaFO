@@ -1,7 +1,7 @@
 // Comportamento Page - Student Behavior Grades
 // Gestão Centralizada FO - CMB
 
-import { getSession, getCompanyFilter } from '../firebase/auth.js';
+import { getSession, getCompanyFilter, isAdmin } from '../firebase/auth.js';
 import { db } from '../firebase/config.js';
 import {
   collection,
@@ -11,7 +11,8 @@ import {
   query,
   where,
   setDoc,
-  getDoc
+  getDoc,
+  writeBatch
 } from 'firebase/firestore';
 import {
   COMPANY_NAMES,
@@ -20,9 +21,17 @@ import {
   formatDate
 } from '../constants/index.js';
 import { icons } from '../utils/icons.js';
+import {
+  getCachedStudentList,
+  cacheStudentList,
+  getCachedFOList,
+  cacheFOList,
+  invalidateStudentCache
+} from '../services/cacheService.js';
 
 let allStudents = [];
 let studentFOs = {};
+let loadedFOsForStudents = new Set(); // Track which students have FOs loaded
 
 export async function renderComportamentoPage() {
   const pageContent = document.getElementById('page-content');
@@ -55,19 +64,26 @@ export async function renderComportamentoPage() {
     <div class="card" style="margin-bottom: var(--space-4);">
       <div class="card__body" style="padding: var(--space-4);">
         <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center;">
-          <div style="flex: 1; min-width: 250px; position: relative;">
+          ${isAdmin() ? `
+          <select class="form-select" id="filter-company" style="width: auto; min-width: 180px;">
+            <option value="">Todas as companhias</option>
+            ${Object.entries(COMPANY_NAMES).map(([key, name]) => `<option value="${key}">${name}</option>`).join('')}
+          </select>
+          ` : ''}
+          <div style="flex: 1; min-width: 200px; position: relative;">
             <input type="text" class="form-input" id="search-aluno" 
-                   placeholder="Buscar por número, nome ou turma..." 
+                   placeholder="Digite o número do aluno..." 
                    style="padding-left: 40px;">
             <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary);">
               ${icons.search}
             </span>
           </div>
-          <select class="form-select" id="filter-turma" style="width: auto;">
-            <option value="">Todas as turmas</option>
-          </select>
+          <button class="btn btn--primary" id="search-btn">
+            ${icons.search}
+            <span>Buscar</span>
+          </button>
           <div style="display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--font-size-sm);">
-            <span id="student-count">0</span> alunos
+            <span id="student-count">0</span> aluno(s)
           </div>
         </div>
       </div>
@@ -75,8 +91,14 @@ export async function renderComportamentoPage() {
     
     <!-- Students List -->
     <div id="comportamento-container">
-      <div style="display: flex; justify-content: center; padding: 3rem;">
-        <span class="spinner spinner--lg"></span>
+      <div class="card">
+        <div class="card__body">
+          <div class="empty-state">
+            <div class="empty-state__icon">${icons.search}</div>
+            <div class="empty-state__title">Buscar Aluno</div>
+            <div class="empty-state__text">Digite o número do aluno para consultar seu comportamento</div>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -249,67 +271,64 @@ export async function renderComportamentoPage() {
   // Setup events
   setupComportamentoEvents();
 
-  // Load data
-  await loadComportamentoData();
+  // DON'T load data automatically - wait for turma selection
+  // This reduces initial reads from ~2600 to 0
 }
 
-async function loadComportamentoData(searchTerm = '', turmaFilter = '') {
+async function loadComportamentoData(studentNumber = '') {
   const container = document.getElementById('comportamento-container');
   const countEl = document.getElementById('student-count');
-  const turmaSelect = document.getElementById('filter-turma');
   const companyFilter = getCompanyFilter();
+  const adminCompanySelect = document.getElementById('filter-company');
+  const selectedCompany = adminCompanySelect?.value || companyFilter;
+
+  // Require student number to search
+  if (!studentNumber || studentNumber.trim() === '') {
+    container.innerHTML = `
+      <div class="card">
+        <div class="card__body">
+          <div class="empty-state">
+            <div class="empty-state__icon">${icons.search}</div>
+            <div class="empty-state__title">Buscar Aluno</div>
+            <div class="empty-state__text">Digite o número do aluno para consultar seu comportamento</div>
+          </div>
+        </div>
+      </div>
+    `;
+    countEl.textContent = '0';
+    return;
+  }
+
+  // Show loading
+  container.innerHTML = `
+    <div style="display: flex; justify-content: center; padding: 3rem;">
+      <span class="spinner spinner--lg"></span>
+    </div>
+  `;
 
   try {
-    // Load students
-    let q;
-    if (companyFilter) {
-      q = query(collection(db, 'students'), where('company', '==', companyFilter));
-    } else {
-      q = query(collection(db, 'students'));
+    // Query by student number - VERY efficient: just 1 read!
+    let constraints = [where('numero', '==', parseInt(studentNumber))];
+
+    if (selectedCompany) {
+      constraints.push(where('company', '==', selectedCompany));
     }
 
+    const q = query(collection(db, 'students'), ...constraints);
     const snapshot = await getDocs(q);
-    allStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    // Sort by turma then numero
-    allStudents.sort((a, b) => {
-      const turmaCompare = String(a.turma || '').localeCompare(String(b.turma || ''));
-      if (turmaCompare !== 0) return turmaCompare;
-      return (a.numero || 0) - (b.numero || 0);
-    });
+    allStudents = students;
+    countEl.textContent = students.length;
 
-    // Populate turma filter
-    const turmas = [...new Set(allStudents.map(s => s.turma).filter(Boolean))].sort();
-    turmaSelect.innerHTML = '<option value="">Todas as turmas</option>' +
-      turmas.map(t => `<option value="${t}" ${t === turmaFilter ? 'selected' : ''}>Turma ${t}</option>`).join('');
-
-    // Load FOs for all students
-    await loadStudentFOs();
-
-    // Apply filters
-    let filteredStudents = allStudents;
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filteredStudents = filteredStudents.filter(s =>
-        String(s.numero).includes(term) ||
-        s.nome?.toLowerCase().includes(term)
-      );
-    }
-
-    if (turmaFilter) {
-      filteredStudents = filteredStudents.filter(s => s.turma === turmaFilter);
-    }
-
-    countEl.textContent = filteredStudents.length;
-
-    if (filteredStudents.length === 0) {
+    if (students.length === 0) {
       container.innerHTML = `
         <div class="card">
           <div class="card__body">
             <div class="empty-state">
               <div class="empty-state__icon">${icons.users}</div>
-              <div class="empty-state__title">Nenhum aluno encontrado</div>
+              <div class="empty-state__title">Aluno não encontrado</div>
+              <div class="empty-state__text">Verifique o número e tente novamente</div>
             </div>
           </div>
         </div>
@@ -318,7 +337,7 @@ async function loadComportamentoData(searchTerm = '', turmaFilter = '') {
     }
 
     // Render cards
-    container.innerHTML = filteredStudents.map(student => renderComportamentoCard(student)).join('');
+    container.innerHTML = students.map(student => renderComportamentoCard(student)).join('');
 
     // Setup card events
     setupCardEvents();
@@ -337,18 +356,29 @@ async function loadComportamentoData(searchTerm = '', turmaFilter = '') {
 }
 
 async function loadStudentFOs() {
+  // This function is now used only for background loading
+  // Individual student FOs are loaded on-demand
   const companyFilter = getCompanyFilter();
+  const cacheKey = companyFilter || 'all';
 
   try {
-    let q;
-    if (companyFilter) {
-      q = query(collection(db, 'fatosObservados'), where('company', '==', companyFilter));
-    } else {
-      q = query(collection(db, 'fatosObservados'));
-    }
+    // Try cache first
+    let fos = getCachedFOList(cacheKey, 'all');
 
-    const snapshot = await getDocs(q);
-    const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (!fos) {
+      let q;
+      if (companyFilter) {
+        q = query(collection(db, 'fatosObservados'), where('company', '==', companyFilter));
+      } else {
+        q = query(collection(db, 'fatosObservados'));
+      }
+
+      const snapshot = await getDocs(q);
+      fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Cache the results
+      cacheFOList(fos, cacheKey, 'all');
+    }
 
     // Group by student number
     studentFOs = {};
@@ -358,6 +388,7 @@ async function loadStudentFOs() {
           studentFOs[numero] = [];
         }
         studentFOs[numero].push(fo);
+        loadedFOsForStudents.add(numero);
       }
     }
 
@@ -371,25 +402,49 @@ async function loadStudentFOs() {
   }
 }
 
+// Load FOs for a specific student on demand
+async function loadStudentFOsOnDemand(studentNumber) {
+  if (loadedFOsForStudents.has(studentNumber)) {
+    return studentFOs[studentNumber] || [];
+  }
+
+  try {
+    const q = query(
+      collection(db, 'fatosObservados'),
+      where('studentNumbers', 'array-contains', studentNumber)
+    );
+
+    const snapshot = await getDocs(q);
+    const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Sort by date
+    fos.sort((a, b) => new Date(b.dataFato) - new Date(a.dataFato));
+
+    studentFOs[studentNumber] = fos;
+    loadedFOsForStudents.add(studentNumber);
+
+    return fos;
+  } catch (error) {
+    console.error('Error loading FOs for student:', studentNumber, error);
+    return [];
+  }
+}
+
 function renderComportamentoCard(student) {
   // Get or default grade to 10
   const grade = student.notaComportamento ?? 10;
   const gradeClass = grade >= 8 ? 'grade-high' : grade >= 5 ? 'grade-medium' : 'grade-low';
 
-  // Get student's FOs
-  const fos = studentFOs[student.numero] || [];
-  const sanctionCount = fos.filter(fo => fo.tipo === 'negativo' && fo.status !== 'pendente').length;
+  // DON'T pre-load FO count - will be loaded when card is expanded
+  // This saves significant Firebase reads
 
   return `
     <div class="comportamento-card" data-id="${student.id}" data-numero="${student.numero}">
-      <div class="comportamento-card__header" onclick="toggleComportamentoCard('${student.id}')">
+      <div class="comportamento-card__header" onclick="toggleComportamentoCard('${student.id}', ${student.numero})">
         <div class="comportamento-card__student">
           <span class="comportamento-card__number">${student.numero}</span>
           <span class="comportamento-card__name">${student.nome || '-'}</span>
           <span class="comportamento-card__turma">${student.turma || '-'}</span>
-          ${sanctionCount > 0 ? `
-            <span class="badge badge--danger" title="Sanções aplicadas">${sanctionCount}</span>
-          ` : ''}
         </div>
         
         <div class="comportamento-card__grade" onclick="event.stopPropagation()">
@@ -405,34 +460,15 @@ function renderComportamentoCard(student) {
         </div>
       </div>
       
-      <div class="comportamento-card__body">
+      <div class="comportamento-card__body" id="card-body-${student.id}">
         <div class="sanction-history">
           <div class="sanction-history__title">Histórico de Sanções</div>
-          
-          ${fos.length === 0 ? `
-            <div class="no-sanctions">
-              ${icons.checkCircle}
-              <p>Nenhum registro de ocorrência para este aluno.</p>
+          <div class="fo-history-content" id="fo-history-${student.numero}">
+            <div style="text-align: center; padding: var(--space-3);">
+              <span class="spinner"></span>
+              <span style="margin-left: 8px; color: var(--text-tertiary);">Carregando...</span>
             </div>
-          ` : `
-            ${fos.map(fo => {
-    const isPositive = fo.tipo === 'positivo';
-    const sancao = fo.sancaoDisciplinar ? SANCAO_DISCIPLINAR[fo.sancaoDisciplinar] : FO_STATUS_LABELS[fo.status] || fo.status;
-
-    return `
-                <div class="sanction-item ${isPositive ? 'sanction-item--positive' : ''}">
-                  <div class="sanction-item__date">${formatDate(fo.dataFato)}</div>
-                  <div>
-                    <div class="sanction-item__type">
-                      ${isPositive ? '✓ Positivo' : sancao}
-                      ${fo.quantidadeDias ? ` (${fo.quantidadeDias} dias)` : ''}
-                    </div>
-                    <div class="sanction-item__desc">${fo.descricao || '-'}</div>
-                  </div>
-                </div>
-              `;
-  }).join('')}
-          `}
+          </div>
         </div>
       </div>
     </div>
@@ -441,26 +477,24 @@ function renderComportamentoCard(student) {
 
 function setupComportamentoEvents() {
   const searchInput = document.getElementById('search-aluno');
-  const turmaFilter = document.getElementById('filter-turma');
+  const searchBtn = document.getElementById('search-btn');
   const saveAllBtn = document.getElementById('save-all-btn');
   const importCsvBtn = document.getElementById('import-csv-btn');
   const csvImportInput = document.getElementById('csv-import-input');
 
-  // Search with debounce
-  if (searchInput) {
-    let debounce;
-    searchInput.addEventListener('input', (e) => {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        loadComportamentoData(e.target.value, turmaFilter.value);
-      }, 300);
+  // Search button click
+  if (searchBtn) {
+    searchBtn.addEventListener('click', () => {
+      loadComportamentoData(searchInput.value.trim());
     });
   }
 
-  // Turma filter
-  if (turmaFilter) {
-    turmaFilter.addEventListener('change', (e) => {
-      loadComportamentoData(searchInput.value, e.target.value);
+  // Enter key on search input
+  if (searchInput) {
+    searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loadComportamentoData(searchInput.value.trim());
+      }
     });
   }
 
@@ -580,12 +614,56 @@ function setupCardEvents() {
 }
 
 // Global functions
-window.toggleComportamentoCard = function (studentId) {
+window.toggleComportamentoCard = async function (studentId, studentNumber) {
   const card = document.querySelector(`.comportamento-card[data-id="${studentId}"]`);
   if (card) {
+    const wasExpanded = card.classList.contains('expanded');
     card.classList.toggle('expanded');
+
+    // If expanding and FOs not loaded yet, load them
+    if (!wasExpanded && studentNumber) {
+      const historyContainer = document.getElementById(`fo-history-${studentNumber}`);
+      if (historyContainer && !loadedFOsForStudents.has(studentNumber)) {
+        // Load FOs on demand
+        const fos = await loadStudentFOsOnDemand(studentNumber);
+        historyContainer.innerHTML = renderFOHistory(fos);
+      } else if (historyContainer && studentFOs[studentNumber]) {
+        // Already loaded, just render
+        historyContainer.innerHTML = renderFOHistory(studentFOs[studentNumber] || []);
+      }
+    }
   }
 };
+
+// Render FO history HTML
+function renderFOHistory(fos) {
+  if (fos.length === 0) {
+    return `
+      <div class="no-sanctions">
+        ${icons.checkCircle}
+        <p>Nenhum registro de ocorrência para este aluno.</p>
+      </div>
+    `;
+  }
+
+  return fos.map(fo => {
+    const isPositive = fo.tipo === 'positivo';
+    const sancao = fo.sancaoDisciplinar ? SANCAO_DISCIPLINAR[fo.sancaoDisciplinar] : FO_STATUS_LABELS[fo.status] || fo.status;
+
+    return `
+      <div class="sanction-item ${isPositive ? 'sanction-item--positive' : ''}">
+        <div class="sanction-item__date">${formatDate(fo.dataFato)}</div>
+        <div>
+          <div class="sanction-item__type">
+            ${isPositive ? '✓ Positivo' : sancao}
+            ${fo.quantidadeDias ? ` (${fo.quantidadeDias} dias)` : ''}
+          </div>
+          <div class="sanction-item__desc">${fo.descricao || '-'}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
 window.updateGradeClass = function (input) {
   const value = parseFloat(input.value);
@@ -608,19 +686,41 @@ async function saveAllGrades() {
   try {
     const gradeInputs = document.querySelectorAll('[data-field="notaComportamento"]');
 
+    // Use batch writes for efficiency - up to 500 operations per batch
+    const batchSize = 500;
+    const grades = [];
+
     for (const input of gradeInputs) {
       const studentId = input.dataset.id;
       const grade = parseFloat(input.value);
 
       if (!isNaN(grade)) {
-        await updateDoc(doc(db, 'students', studentId), {
+        grades.push({ studentId, grade });
+      }
+    }
+
+    // Process in batches
+    let processed = 0;
+    for (let i = 0; i < grades.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const batchItems = grades.slice(i, i + batchSize);
+
+      for (const { studentId, grade } of batchItems) {
+        const docRef = doc(db, 'students', studentId);
+        batch.update(docRef, {
           notaComportamento: grade,
           updatedAt: new Date().toISOString()
         });
       }
+
+      await batch.commit();
+      processed += batchItems.length;
     }
 
-    showToast('Notas salvas com sucesso!', 'success');
+    // Invalidate student cache after batch update
+    invalidateStudentCache();
+
+    showToast(`${processed} notas salvas com sucesso!`, 'success');
 
   } catch (error) {
     console.error('Error saving grades:', error);
