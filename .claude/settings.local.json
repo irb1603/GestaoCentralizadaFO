@@ -23,7 +23,9 @@
       "Bash(open https://gestaocentralizadafo.netlify.app)",
       "Bash(open \"https://console.firebase.google.com/project/gestaocentralizadafo/firestore/databases/-default-/data\")",
       "Bash(open \"https://console.firebase.google.com/project/gestaocentralizadafo/firestore/databases/-default-/rules\")",
-      "Bash(open \"https://console.firebase.google.com/project/gestaocentralizadafo/firestore/databases/-default-/data/~2Fusers~2FAdmin\")"
+      "Bash(open \"https://console.firebase.google.com/project/gestaocentralizadafo/firestore/databases/-default-/data/~2Fusers~2FAdmin\")",
+      "Bash(git pull:*)",
+      "Bash(git rm:*)"
     ]
   }
 }
