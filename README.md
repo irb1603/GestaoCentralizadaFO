@@ -15,15 +15,13 @@ Sistema web completo para gestão centralizada de Fatos Observados (Faltas Opera
 🔗 [https://gestaocentralizadafo.netlify.app/public-fo](https://gestaocentralizadafo.netlify.app/public-fo)
 
 ### **🎓 Treinamento para Operadores**
-🔗 [https://gestaocentralizadafo.netlify.app/treinamento-operadores](https://gestaocentralizadafo.netlify.app/treinamento-operadores)
+📄 **Treinamento_Operadores_Sistema_FO.pptx** (disponível no repositório)
 
-Apresentação interativa completa com:
-- 12 seções didáticas
-- 40+ slides
-- 6 marcadores para vídeos demonstrativos
-- Recursos interativos (salvamento de progresso, atalhos, etc.)
-
-📖 [Documentação do Treinamento](TREINAMENTO-README.md)
+Apresentação PowerPoint completa com:
+- 35 slides didáticos
+- Conteúdo organizado em 10 seções
+- Cores institucionais do CMB
+- Material pronto para apresentação
 
 ---
 
@@ -128,22 +126,22 @@ O sistema implementa completamente o Regulamento Interno dos Colégios Militares
 
 ### **Material Disponível**
 
-1. **Apresentação Interativa em Slides**
-   - Acesse: [/treinamento-operadores](https://gestaocentralizadafo.netlify.app/treinamento-operadores)
-   - Duração: 60-90 minutos
-   - Com vídeos: 80-110 minutos
+📄 **Treinamento_Operadores_Sistema_FO.pptx**
 
-2. **Documentação Completa**
-   - [Manual do Treinamento](TREINAMENTO-README.md)
-   - [Roteiros dos Vídeos](ROTEIRO-VIDEOS.md)
+Apresentação PowerPoint completa com 35 slides cobrindo:
 
-3. **6 Vídeos Demonstrativos** (planejados - 21 min total)
-   - Navegando pelos Perfis (2 min)
-   - Registrando um FO (3 min)
-   - Enquadrando com RICM (4 min)
-   - Navegando pelos Status (5 min)
-   - Gerando Documentos (4 min)
-   - Usando o Assistente IA (3 min)
+1. **Introdução ao Sistema de FO**
+2. **Tipos de Usuários e Permissões**
+3. **Fluxo Completo das Sanções Disciplinares**
+4. **Como Registrar um FO**
+5. **Sistema de Enquadramento RICM**
+6. **Status e Etapas do Processo** (8 status)
+7. **Geração de Documentos Automáticos**
+8. **Assistente de IA**
+9. **Boas Práticas e Erros Comuns**
+10. **Recursos Adicionais e Resumo**
+
+**Duração estimada:** 60-90 minutos
 
 ---
 
@@ -218,8 +216,8 @@ Para dúvidas sobre o sistema, consulte:
 ## 🎯 Status do Projeto
 
 ✅ Sistema em produção
-✅ Treinamento disponível
-🔄 Vídeos em produção
+✅ Treinamento em PowerPoint disponível
+✅ Material didático completo
 
 ---
 
