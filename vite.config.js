@@ -7,7 +7,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        'public-fo': './public-fo.html'
+        'public-fo': './public-fo.html',
+        'treinamento': './treinamento-operadores.html'
       }
     }
   },
