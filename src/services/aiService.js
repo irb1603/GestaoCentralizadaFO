@@ -17,6 +17,7 @@ import {
 import { getSession } from '../firebase/auth.js';
 import { AI_CONFIGS_COLLECTION, AI_LOGS_COLLECTION, DEFAULT_AI_MODEL, AI_CONTEXT_DAYS } from '../constants/aiConfig.js';
 import { generateSystemPrompt, generateContextPrompt, SUGGESTED_QUERIES } from '../utils/aiPrompts.js';
+import { getCachedAIData, cacheAIData, CACHE_TTL } from './cacheService.js';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -162,13 +163,63 @@ async function gatherContextData(userQuery) {
     startOfWeek.setDate(today.getDate() - today.getDay());
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
+    // Extract student number if mentioned (e.g., "aluno 12345", "número 67890")
+    const studentNumberMatch = lowerQuery.match(/(?:aluno|número|n[º°]|num)\s*(\d{4,6})/i);
+    const studentNumber = studentNumberMatch ? studentNumberMatch[1] : null;
+
+    // Check if user is requesting RICM framing (for auto-fetch student history)
+    const isFramingQuery = lowerQuery.includes('enquadr') || lowerQuery.includes('ricm') ||
+                           lowerQuery.includes('artigo') || lowerQuery.includes('falta') && lowerQuery.includes('qual');
+
+    // Student History (individual student analysis)
+    // ALSO fetch if framing query AND student number mentioned (for atenuantes/agravantes analysis)
+    if (studentNumber) {
+        if (lowerQuery.includes('histórico') || lowerQuery.includes('historico') || isFramingQuery) {
+            contextData.studentHistory = await getStudentHistory(studentNumber, companyFilter);
+
+            // Add context note for framing queries
+            if (isFramingQuery && contextData.studentHistory && !contextData.studentHistory.error) {
+                contextData.framingContext = {
+                    note: `CONTEXTO PARA ENQUADRAMENTO: Aluno ${studentNumber} tem histórico conhecido (use para analisar reincidência/primeira falta)`,
+                    isFirstOffense: contextData.studentHistory.totalFOs === 0,
+                    hasNegativeHistory: contextData.studentHistory.negativos > 0,
+                    previousSimilar: false // Would need more complex logic to detect similar violations
+                };
+            }
+        }
+    }
+
+    // Recurrence Analysis
+    if (lowerQuery.includes('reincid') || lowerQuery.includes('múltiplos') || lowerQuery.includes('multiplos') ||
+        lowerQuery.includes('repetid') || lowerQuery.includes('mais de')) {
+        contextData.recurrence = await getRecurrenceAnalysis(companyFilter);
+    }
+
+    // Period Comparison
+    if (lowerQuery.includes('compar') || lowerQuery.includes('anterior') || lowerQuery.includes('últim') ||
+        lowerQuery.includes('ultim') || lowerQuery.includes('passad') || lowerQuery.includes('evolu')) {
+        contextData.periodComparison = await getPeriodComparison(companyFilter);
+    }
+
+    // Analysis by Class/Turma
+    if (lowerQuery.includes('turma') || lowerQuery.includes('classe') || lowerQuery.includes('sala')) {
+        contextData.byTurma = await getAnalysisByTurma(companyFilter);
+    }
+
+    // Preventive Alerts
+    if (lowerQuery.includes('alert') || lowerQuery.includes('risco') || lowerQuery.includes('próxim') ||
+        lowerQuery.includes('proxim') || lowerQuery.includes('atenção') || lowerQuery.includes('atencao') ||
+        lowerQuery.includes('cuidado') || lowerQuery.includes('problema')) {
+        contextData.alerts = await getPreventiveAlerts(companyFilter);
+    }
+
     // FO Statistics
     if (lowerQuery.includes('fo') || lowerQuery.includes('fato') || lowerQuery.includes('observad')) {
         contextData.foStats = await getFOStats(companyFilter, startOfWeek, startOfMonth);
     }
 
     // Observer ranking
-    if (lowerQuery.includes('observador') || lowerQuery.includes('registr')) {
+    if (lowerQuery.includes('observador') || lowerQuery.includes('registr') || lowerQuery.includes('professor')) {
         contextData.observerRanking = await getObserverRanking(companyFilter, startOfMonth);
     }
 
@@ -207,10 +258,485 @@ async function gatherContextData(userQuery) {
     return contextData;
 }
 
+// ============================================
+// HELPER: Get ALL FOs (cached globally for reuse)
+// ============================================
+
 /**
- * Get FO statistics
+ * Get ALL FOs for company (with aggressive caching)
+ * This is used as base for multiple analyses to minimize reads
+ */
+async function getAllFOs(companyFilter) {
+    const cacheKey = 'allFOs';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached ALL FOs for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh ALL FOs for', company);
+
+    let q = query(collection(db, 'fatosObservados'));
+
+    if (companyFilter) {
+        q = query(q, where('company', '==', companyFilter));
+    }
+
+    const snapshot = await getDocs(q);
+    const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Cache for 2 minutes (base data for many analyses)
+    cacheAIData(cacheKey, fos, company, CACHE_TTL.FOS);
+
+    return fos;
+}
+
+// ============================================
+// NEW FEATURES - HIGH PRIORITY
+// ============================================
+
+/**
+ * Get complete student history (with cache)
+ * OPTIMIZATION: 1 query for FOs + 1 read for student data = 2 operations total
+ */
+async function getStudentHistory(studentNumber, companyFilter) {
+    const cacheKey = 'studentHistory_' + studentNumber;
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached student history for', studentNumber);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh student history for', studentNumber);
+
+    try {
+        // Get student basic data (1 read)
+        const studentDoc = await getDoc(doc(db, 'students', String(studentNumber)));
+        if (!studentDoc.exists()) {
+            return { error: `Aluno ${studentNumber} não encontrado no sistema.` };
+        }
+
+        const studentData = studentDoc.data();
+
+        // Get all FOs for this student (1 query)
+        let q = query(
+            collection(db, 'fatosObservados'),
+            where('studentNumbers', 'array-contains', parseInt(studentNumber))
+        );
+
+        const snapshot = await getDocs(q);
+        const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Aggregate data
+        const positivos = fos.filter(fo => fo.tipo === 'positivo').length;
+        const negativos = fos.filter(fo => fo.tipo === 'negativo').length;
+        const neutros = fos.filter(fo => fo.tipo === 'neutro').length;
+
+        // Count sanctions
+        const sanctions = {
+            advertencia: fos.filter(fo => fo.sancaoDisciplinar === 'ADVERTENCIA').length,
+            repreensao: fos.filter(fo => fo.sancaoDisciplinar === 'REPREENSAO').length,
+            aoe: fos.filter(fo => fo.sancaoDisciplinar === 'ATIVIDADE_OE').length,
+            retirada: fos.filter(fo => fo.sancaoDisciplinar === 'RETIRADA').length,
+            justificado: fos.filter(fo => fo.sancaoDisciplinar === 'JUSTIFICADO').length
+        };
+
+        // Most recent FOs (last 5)
+        const recentFOs = fos
+            .sort((a, b) => new Date(b.dataFato || b.createdAt) - new Date(a.dataFato || a.createdAt))
+            .slice(0, 5)
+            .map(fo => ({
+                data: fo.dataFato,
+                tipo: fo.tipo,
+                descricao: fo.descricao?.substring(0, 100),
+                sancao: fo.sancaoDisciplinar,
+                status: fo.status
+            }));
+
+        const result = {
+            studentNumber,
+            nome: studentData.nome,
+            turma: studentData.turma,
+            company: studentData.company,
+            totalFOs: fos.length,
+            positivos,
+            negativos,
+            neutros,
+            sanctions,
+            recentFOs,
+            firstFO: fos.length > 0 ? fos[fos.length - 1].dataFato : null,
+            lastFO: fos.length > 0 ? fos[0].dataFato : null
+        };
+
+        // Cache for 5 minutes
+        cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+        return result;
+    } catch (error) {
+        console.error('Error getting student history:', error);
+        return { error: `Erro ao buscar histórico: ${error.message}` };
+    }
+}
+
+/**
+ * Get recurrence analysis (with cache)
+ * OPTIMIZATION: Uses cached getAllFOs() = 0 new reads if cache hit
+ */
+async function getRecurrenceAnalysis(companyFilter) {
+    const cacheKey = 'recurrenceAnalysis';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached recurrence analysis for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh recurrence analysis for', company);
+
+    // Get all FOs (uses cache if available)
+    const fos = await getAllFOs(companyFilter);
+
+    // Aggregate by student
+    const studentFOCount = {};
+    fos.forEach(fo => {
+        const studentNum = fo.studentNumbers?.[0];
+        if (studentNum) {
+            if (!studentFOCount[studentNum]) {
+                studentFOCount[studentNum] = {
+                    numero: studentNum,
+                    nome: fo.studentInfo?.[0]?.nome || 'Desconhecido',
+                    turma: fo.studentInfo?.[0]?.turma || '?',
+                    total: 0,
+                    negativos: 0,
+                    byType: {}
+                };
+            }
+            studentFOCount[studentNum].total++;
+            if (fo.tipo === 'negativo') {
+                studentFOCount[studentNum].negativos++;
+            }
+
+            // Count by RICM article (if available)
+            const falta = fo.enquadramento?.falta;
+            if (falta) {
+                studentFOCount[studentNum].byType[falta] = (studentFOCount[studentNum].byType[falta] || 0) + 1;
+            }
+        }
+    });
+
+    // Find students with 3+ FOs
+    const recurrent = Object.values(studentFOCount)
+        .filter(s => s.total >= 3)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 15);
+
+    // Find students with same violation 2+ times
+    const sameViolation = Object.values(studentFOCount)
+        .filter(s => Object.values(s.byType).some(count => count >= 2))
+        .map(s => ({
+            ...s,
+            repeatedViolations: Object.entries(s.byType)
+                .filter(([_, count]) => count >= 2)
+                .map(([falta, count]) => ({ falta, count }))
+        }))
+        .slice(0, 10);
+
+    const result = {
+        recurrentStudents: recurrent,
+        sameViolationStudents: sameViolation,
+        totalRecurrent: recurrent.length
+    };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
+}
+
+/**
+ * Get period comparison (with cache)
+ * OPTIMIZATION: Uses cached getAllFOs() = 0 new reads if cache hit
+ */
+async function getPeriodComparison(companyFilter) {
+    const cacheKey = 'periodComparison';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached period comparison for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh period comparison for', company);
+
+    // Get all FOs (uses cache if available)
+    const fos = await getAllFOs(companyFilter);
+
+    const today = new Date();
+
+    // Current month
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    // Previous month
+    const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+    // Filter by period
+    const currentMonth = fos.filter(fo => {
+        const date = new Date(fo.dataFato || fo.createdAt);
+        return date >= currentMonthStart && date <= currentMonthEnd;
+    });
+
+    const previousMonth = fos.filter(fo => {
+        const date = new Date(fo.dataFato || fo.createdAt);
+        return date >= previousMonthStart && date <= previousMonthEnd;
+    });
+
+    // Calculate stats
+    const calcStats = (fosArray) => ({
+        total: fosArray.length,
+        positivos: fosArray.filter(fo => fo.tipo === 'positivo').length,
+        negativos: fosArray.filter(fo => fo.tipo === 'negativo').length,
+        neutros: fosArray.filter(fo => fo.tipo === 'neutro').length
+    });
+
+    const currentStats = calcStats(currentMonth);
+    const previousStats = calcStats(previousMonth);
+
+    // Calculate variation
+    const variation = {
+        total: currentStats.total - previousStats.total,
+        positivos: currentStats.positivos - previousStats.positivos,
+        negativos: currentStats.negativos - previousStats.negativos,
+        neutros: currentStats.neutros - previousStats.neutros,
+        percentage: previousStats.total > 0
+            ? ((currentStats.total - previousStats.total) / previousStats.total * 100).toFixed(1)
+            : 'N/A'
+    };
+
+    const result = {
+        currentMonth: {
+            periodo: `${currentMonthStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
+            ...currentStats
+        },
+        previousMonth: {
+            periodo: `${previousMonthStart.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
+            ...previousStats
+        },
+        variation,
+        trend: variation.total > 0 ? 'aumento' : variation.total < 0 ? 'redução' : 'estável'
+    };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
+}
+
+/**
+ * Get analysis by Turma (with cache)
+ * OPTIMIZATION: Uses cached getAllFOs() = 0 new reads if cache hit
+ */
+async function getAnalysisByTurma(companyFilter) {
+    const cacheKey = 'analysisByTurma';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached analysis by turma for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh analysis by turma for', company);
+
+    // Get all FOs (uses cache if available)
+    const fos = await getAllFOs(companyFilter);
+
+    // Aggregate by turma
+    const turmaStats = {};
+
+    fos.forEach(fo => {
+        const turma = fo.studentInfo?.[0]?.turma || 'Sem Turma';
+
+        if (!turmaStats[turma]) {
+            turmaStats[turma] = {
+                turma,
+                total: 0,
+                positivos: 0,
+                negativos: 0,
+                neutros: 0,
+                students: new Set()
+            };
+        }
+
+        turmaStats[turma].total++;
+        if (fo.tipo === 'positivo') turmaStats[turma].positivos++;
+        if (fo.tipo === 'negativo') turmaStats[turma].negativos++;
+        if (fo.tipo === 'neutro') turmaStats[turma].neutros++;
+
+        const studentNum = fo.studentNumbers?.[0];
+        if (studentNum) {
+            turmaStats[turma].students.add(studentNum);
+        }
+    });
+
+    // Convert to array and calculate averages
+    const turmas = Object.values(turmaStats).map(t => ({
+        turma: t.turma,
+        total: t.total,
+        positivos: t.positivos,
+        negativos: t.negativos,
+        neutros: t.neutros,
+        studentsCount: t.students.size,
+        avgFOsPerStudent: t.students.size > 0 ? (t.total / t.students.size).toFixed(2) : 0,
+        negativosPercentage: t.total > 0 ? ((t.negativos / t.total) * 100).toFixed(1) : 0
+    }));
+
+    // Sort by total FOs (most problematic first)
+    turmas.sort((a, b) => b.total - a.total);
+
+    const result = {
+        turmas,
+        totalTurmas: turmas.length,
+        mostProblematic: turmas[0],
+        mostPositive: turmas.sort((a, b) => b.positivos - a.positivos)[0]
+    };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
+}
+
+/**
+ * Get preventive alerts (with cache)
+ * OPTIMIZATION: Uses cached getAllFOs() and comportamento = minimal new reads
+ */
+async function getPreventiveAlerts(companyFilter) {
+    const cacheKey = 'preventiveAlerts';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached preventive alerts for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh preventive alerts for', company);
+
+    // Get all FOs (uses cache if available)
+    const fos = await getAllFOs(companyFilter);
+
+    // Aggregate by student
+    const studentRisk = {};
+
+    fos.forEach(fo => {
+        const studentNum = fo.studentNumbers?.[0];
+        if (!studentNum) return;
+
+        if (!studentRisk[studentNum]) {
+            studentRisk[studentNum] = {
+                numero: studentNum,
+                nome: fo.studentInfo?.[0]?.nome || 'Desconhecido',
+                turma: fo.studentInfo?.[0]?.turma || '?',
+                riskScore: 0,
+                repreensoes: 0,
+                aoes: 0,
+                negativos: 0,
+                reasons: []
+            };
+        }
+
+        const student = studentRisk[studentNum];
+
+        // Count sanctions
+        if (fo.sancaoDisciplinar === 'REPREENSAO') {
+            student.repreensoes++;
+            student.riskScore += 10;
+        }
+        if (fo.sancaoDisciplinar === 'ATIVIDADE_OE') {
+            student.aoes++;
+            student.riskScore += 20;
+        }
+        if (fo.tipo === 'negativo') {
+            student.negativos++;
+            student.riskScore += 2;
+        }
+    });
+
+    // Identify high-risk students
+    const alerts = Object.values(studentRisk)
+        .map(s => {
+            // Risk criteria
+            if (s.aoes >= 2) {
+                s.reasons.push(`${s.aoes} AOEs registradas (risco de Retirada)`);
+                s.riskLevel = 'CRÍTICO';
+            } else if (s.aoes >= 1) {
+                s.reasons.push(`${s.aoes} AOE registrada`);
+                s.riskLevel = 'ALTO';
+            } else if (s.repreensoes >= 3) {
+                s.reasons.push(`${s.repreensoes} Repreensões (próximo de AOE)`);
+                s.riskLevel = 'ALTO';
+            } else if (s.repreensoes >= 2) {
+                s.reasons.push(`${s.repreensoes} Repreensões`);
+                s.riskLevel = 'MÉDIO';
+            } else if (s.negativos >= 5) {
+                s.reasons.push(`${s.negativos} FOs negativos`);
+                s.riskLevel = 'MÉDIO';
+            }
+
+            return s;
+        })
+        .filter(s => s.riskLevel)
+        .sort((a, b) => b.riskScore - a.riskScore);
+
+    const result = {
+        highRiskStudents: alerts,
+        critical: alerts.filter(a => a.riskLevel === 'CRÍTICO').length,
+        high: alerts.filter(a => a.riskLevel === 'ALTO').length,
+        medium: alerts.filter(a => a.riskLevel === 'MÉDIO').length,
+        totalAlerts: alerts.length
+    };
+
+    // Cache for 2 minutes (risk changes quickly)
+    cacheAIData(cacheKey, result, company, CACHE_TTL.FOS);
+
+    return result;
+}
+
+// ============================================
+// EXISTING FEATURES (with cache)
+// ============================================
+
+/**
+ * Get FO statistics (with cache)
  */
 async function getFOStats(companyFilter, startOfWeek, startOfMonth) {
+    const cacheKey = 'foStats';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached FO stats for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh FO stats for', company);
+
+    // Fetch from Firebase
     let q = query(collection(db, 'fatosObservados'));
 
     if (companyFilter) {
@@ -245,13 +771,28 @@ async function getFOStats(companyFilter, startOfWeek, startOfMonth) {
         }
     });
 
+    // Cache for 2 minutes (stats change frequently)
+    cacheAIData(cacheKey, stats, company, CACHE_TTL.FOS);
+
     return stats;
 }
 
 /**
- * Get observer ranking
+ * Get observer ranking (with cache)
  */
 async function getObserverRanking(companyFilter, startOfMonth) {
+    const cacheKey = 'observerRanking';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached observer ranking for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh observer ranking for', company);
+
     let q = query(collection(db, 'fatosObservados'));
 
     if (companyFilter) {
@@ -275,13 +816,30 @@ async function getObserverRanking(companyFilter, startOfMonth) {
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
 
-    return { periodo: 'Mês atual', ranking };
+    const result = { periodo: 'Mês atual', ranking };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
 }
 
 /**
- * Get aditamento statistics
+ * Get aditamento statistics (with cache)
  */
 async function getAditamentoStats(companyFilter) {
+    const cacheKey = 'aditamentoStats';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached aditamento stats for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh aditamento stats for', company);
+
     let q = query(
         collection(db, 'fatosObservados'),
         where('dataAdtBI', '!=', null)
@@ -306,18 +864,35 @@ async function getAditamentoStats(companyFilter) {
 
     const thisWeekFOs = fos.filter(fo => fo.dataAdtBI >= weekStart && fo.dataAdtBI <= weekEnd);
 
-    return {
+    const result = {
         semana: thisWeekFOs.length,
         repreensao: thisWeekFOs.filter(fo => fo.sancaoDisciplinar === 'REPREENSAO').length,
         aoe: thisWeekFOs.filter(fo => fo.sancaoDisciplinar === 'ATIVIDADE_OE').length,
         retirada: thisWeekFOs.filter(fo => fo.sancaoDisciplinar === 'RETIRADA').length
     };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
 }
 
 /**
- * Get faltas statistics
+ * Get faltas statistics (with cache)
  */
 async function getFaltasStats(companyFilter) {
+    const cacheKey = 'faltasStats';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached faltas stats for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh faltas stats for', company);
+
     let q = query(collection(db, 'faltasEscolares'));
 
     const snapshot = await getDocs(q);
@@ -345,16 +920,33 @@ async function getFaltasStats(companyFilter) {
         .sort((a, b) => b.faltas - a.faltas)
         .slice(0, 10);
 
-    return {
+    const result = {
         total: faltas.length,
         maioresFaltantes
     };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
 }
 
 /**
- * Get students in AOE/Retirada
+ * Get students in AOE/Retirada (with cache)
  */
 async function getSancoesCumprimento(companyFilter) {
+    const cacheKey = 'sancoesCumprimento';
+    const company = companyFilter || 'all';
+
+    // Try cache first (shorter TTL since it's date-specific)
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached sanções cumprimento for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh sanções cumprimento for', company);
+
     const today = new Date().toISOString().split('T')[0];
 
     let q = query(collection(db, 'fatosObservados'));
@@ -385,13 +977,30 @@ async function getSancoesCumprimento(companyFilter) {
         turma: fo.studentInfo?.[0]?.turma
     }));
 
-    return { data: today, aoe, retirada };
+    const result = { data: today, aoe, retirada };
+
+    // Cache for 2 minutes (changes frequently)
+    cacheAIData(cacheKey, result, company, CACHE_TTL.FOS);
+
+    return result;
 }
 
 /**
- * Get sanções statistics
+ * Get sanções statistics (with cache)
  */
 async function getSancoesStats(companyFilter, startOfMonth) {
+    const cacheKey = 'sancoesStats';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached sanções stats for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh sanções stats for', company);
+
     let q = query(collection(db, 'fatosObservados'));
 
     if (companyFilter) {
@@ -404,7 +1013,7 @@ async function getSancoesStats(companyFilter, startOfMonth) {
 
     const monthFOs = fos.filter(fo => (fo.dataRegistro || fo.dataFato) >= monthStart);
 
-    return {
+    const result = {
         periodo: 'Mês atual',
         advertencia: monthFOs.filter(fo => fo.sancaoDisciplinar === 'ADVERTENCIA').length,
         repreensao: monthFOs.filter(fo => fo.sancaoDisciplinar === 'REPREENSAO').length,
@@ -413,12 +1022,29 @@ async function getSancoesStats(companyFilter, startOfMonth) {
         justificado: monthFOs.filter(fo => fo.sancaoDisciplinar === 'JUSTIFICADO').length,
         total: monthFOs.filter(fo => fo.sancaoDisciplinar).length
     };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
 }
 
 /**
- * Get comportamento statistics
+ * Get comportamento statistics (with cache)
  */
 async function getComportamentoStats(companyFilter) {
+    const cacheKey = 'comportamentoStats';
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached comportamento stats for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh comportamento stats for', company);
+
     let q = query(collection(db, 'comportamento'), orderBy('dataConsolidacao', 'desc'));
 
     const snapshot = await getDocs(q);
@@ -457,7 +1083,12 @@ async function getComportamentoStats(companyFilter) {
 
     declining.sort((a, b) => a.variacao - b.variacao);
 
-    return { alunos: declining.slice(0, 10) };
+    const result = { alunos: declining.slice(0, 10) };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
 }
 
 /**
@@ -476,7 +1107,7 @@ const PEDAGOGICAL_KEYWORDS = [
 ];
 
 /**
- * Get pedagogical FOs (learning-related) for the week
+ * Get pedagogical FOs (learning-related) for the week (with cache)
  * Only available to Cmt Cia for their company
  */
 async function getPedagogicalFOs(companyFilter) {
@@ -486,6 +1117,18 @@ async function getPedagogicalFOs(companyFilter) {
     if (!companyFilter || !['commander', 'admin'].includes(session?.role)) {
         return null;
     }
+
+    const cacheKey = 'pedagogicalFOs';
+    const company = companyFilter;
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached pedagogical FOs for', company);
+        return cached;
+    }
+
+    console.log('[AI Cache] Fetching fresh pedagogical FOs for', company);
 
     // Calculate week range
     const today = new Date();
@@ -537,7 +1180,7 @@ async function getPedagogicalFOs(companyFilter) {
         data: fo.dataRegistro || fo.dataFato
     }));
 
-    return {
+    const result = {
         total: pedagogicalFOs.length,
         semana: weekStart,
         categories: {
@@ -548,6 +1191,11 @@ async function getPedagogicalFOs(companyFilter) {
         },
         detalhes: studentsData.slice(0, 15) // Limit to 15 for context
     };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
 }
 
 /**
@@ -555,6 +1203,125 @@ async function getPedagogicalFOs(companyFilter) {
  */
 function formatContextForPrompt(contextData) {
     let formatted = '';
+
+    // FRAMING CONTEXT (for RICM enquadramento with student history)
+    if (contextData.framingContext) {
+        formatted += `\n⚠️ ${contextData.framingContext.note}
+- É primeira falta? ${contextData.framingContext.isFirstOffense ? 'SIM - CONSIDERE ATENUANTE ITEM 4' : 'NÃO'}
+- Tem histórico negativo? ${contextData.framingContext.hasNegativeHistory ? 'SIM - CONSIDERE AGRAVANTE ITEM 5 (reincidência)' : 'NÃO'}
+- Comportamento exemplar? ${!contextData.framingContext.hasNegativeHistory ? 'SIM - CONSIDERE ATENUANTE ITEM 2' : 'NÃO'}\n`;
+    }
+
+    // NEW FEATURES FORMATTING
+
+    if (contextData.studentHistory) {
+        const sh = contextData.studentHistory;
+        if (sh.error) {
+            formatted += `\n=== HISTÓRICO DO ALUNO ===\nERRO: ${sh.error}\n`;
+        } else {
+            formatted += `\n=== HISTÓRICO COMPLETO DO ALUNO ${sh.studentNumber} ===
+Nome: ${sh.nome}
+Turma: ${sh.turma}
+Companhia: ${sh.company}
+
+ESTATÍSTICAS:
+Total de FOs: ${sh.totalFOs}
+- Positivos: ${sh.positivos}
+- Negativos: ${sh.negativos}
+- Neutros: ${sh.neutros}
+
+SANÇÕES APLICADAS:
+- Advertências: ${sh.sanctions.advertencia}
+- Repreensões: ${sh.sanctions.repreensao}
+- AOE: ${sh.sanctions.aoe}
+- Retiradas: ${sh.sanctions.retirada}
+- Justificados: ${sh.sanctions.justificado}
+
+PERÍODO:
+- Primeiro FO: ${sh.firstFO || 'N/A'}
+- Último FO: ${sh.lastFO || 'N/A'}
+
+ÚLTIMOS 5 FOs:\n`;
+            sh.recentFOs?.forEach((fo, i) => {
+                formatted += `${i + 1}. ${fo.data} - ${fo.tipo.toUpperCase()} - ${fo.descricao || 'Sem descrição'}\n   Sanção: ${fo.sancao || 'Não aplicada'} | Status: ${fo.status}\n`;
+            });
+        }
+    }
+
+    if (contextData.recurrence) {
+        formatted += `\n=== ANÁLISE DE REINCIDÊNCIA ===
+Total de alunos reincidentes (3+ FOs): ${contextData.recurrence.totalRecurrent}
+
+ALUNOS COM MAIS FOs:\n`;
+        contextData.recurrence.recurrentStudents?.slice(0, 10).forEach((s, i) => {
+            formatted += `${i + 1}. Nº ${s.numero} - ${s.nome} (${s.turma}): ${s.total} FOs (${s.negativos} negativos)\n`;
+        });
+
+        if (contextData.recurrence.sameViolationStudents?.length > 0) {
+            formatted += `\nALUNOS COM MESMA VIOLAÇÃO REPETIDA:\n`;
+            contextData.recurrence.sameViolationStudents.forEach((s, i) => {
+                formatted += `${i + 1}. Nº ${s.numero} - ${s.nome}: `;
+                s.repeatedViolations.forEach(v => {
+                    formatted += `Falta ${v.falta} (${v.count}x) `;
+                });
+                formatted += `\n`;
+            });
+        }
+    }
+
+    if (contextData.periodComparison) {
+        const pc = contextData.periodComparison;
+        formatted += `\n=== COMPARAÇÃO DE PERÍODOS ===
+
+MÊS ATUAL (${pc.currentMonth.periodo}):
+- Total: ${pc.currentMonth.total} FOs
+- Positivos: ${pc.currentMonth.positivos}
+- Negativos: ${pc.currentMonth.negativos}
+- Neutros: ${pc.currentMonth.neutros}
+
+MÊS ANTERIOR (${pc.previousMonth.periodo}):
+- Total: ${pc.previousMonth.total} FOs
+- Positivos: ${pc.previousMonth.positivos}
+- Negativos: ${pc.previousMonth.negativos}
+- Neutros: ${pc.previousMonth.neutros}
+
+VARIAÇÃO:
+- Total: ${pc.variation.total > 0 ? '+' : ''}${pc.variation.total} (${pc.variation.percentage}%)
+- Positivos: ${pc.variation.positivos > 0 ? '+' : ''}${pc.variation.positivos}
+- Negativos: ${pc.variation.negativos > 0 ? '+' : ''}${pc.variation.negativos}
+- Tendência: ${pc.trend.toUpperCase()}\n`;
+    }
+
+    if (contextData.byTurma) {
+        formatted += `\n=== ANÁLISE POR TURMA ===
+Total de turmas: ${contextData.byTurma.totalTurmas}
+
+RANKING DE TURMAS (por total de FOs):\n`;
+        contextData.byTurma.turmas?.slice(0, 10).forEach((t, i) => {
+            formatted += `${i + 1}. ${t.turma}: ${t.total} FOs (${t.negativos} negativos, ${t.negativosPercentage}% negatividade)
+   ${t.studentsCount} alunos | Média: ${t.avgFOsPerStudent} FOs/aluno\n`;
+        });
+
+        if (contextData.byTurma.mostProblematic) {
+            formatted += `\nTURMA MAIS PROBLEMÁTICA: ${contextData.byTurma.mostProblematic.turma} (${contextData.byTurma.mostProblematic.total} FOs)\n`;
+        }
+    }
+
+    if (contextData.alerts) {
+        formatted += `\n=== ALERTAS PREVENTIVOS ===
+Total de alunos em risco: ${contextData.alerts.totalAlerts}
+- Risco CRÍTICO: ${contextData.alerts.critical}
+- Risco ALTO: ${contextData.alerts.high}
+- Risco MÉDIO: ${contextData.alerts.medium}
+
+ALUNOS EM RISCO:\n`;
+        contextData.alerts.highRiskStudents?.slice(0, 15).forEach((s, i) => {
+            formatted += `${i + 1}. Nº ${s.numero} - ${s.nome} (${s.turma}) - ${s.riskLevel}
+   Score: ${s.riskScore} | Motivos: ${s.reasons.join('; ')}\n`;
+        });
+    }
+
+    // EXISTING FEATURES FORMATTING
 
     if (contextData.foStats) {
         formatted += `\n=== ESTATÍSTICAS DE FOs ===

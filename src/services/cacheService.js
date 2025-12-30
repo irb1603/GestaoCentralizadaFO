@@ -387,6 +387,45 @@ export function invalidateStatsCache() {
 }
 
 // ============================================
+// AI Data Cache Functions
+// ============================================
+
+const AI_DATA_PREFIX = 'ai_data_';
+
+/**
+ * Get cached AI data by key
+ * @param {string} dataType - Type of AI data (foStats, observerRanking, etc.)
+ * @param {string} company - Company filter (or 'all')
+ * @returns {any|null} - Cached data or null
+ */
+export function getCachedAIData(dataType, company = 'all') {
+    return getFromCache(AI_DATA_PREFIX + dataType + '_' + company);
+}
+
+/**
+ * Cache AI data
+ * @param {string} dataType - Type of AI data
+ * @param {any} data - Data to cache
+ * @param {string} company - Company filter (or 'all')
+ * @param {number} ttl - Optional custom TTL (defaults to TTL.STATS)
+ */
+export function cacheAIData(dataType, data, company = 'all', ttl = null) {
+    setInCache(AI_DATA_PREFIX + dataType + '_' + company, data, ttl || TTL.STATS);
+}
+
+/**
+ * Invalidate AI data cache
+ * @param {string} dataType - Optional specific type to invalidate
+ */
+export function invalidateAICache(dataType = null) {
+    if (dataType) {
+        clearCacheByPrefix(AI_DATA_PREFIX + dataType);
+    } else {
+        clearCacheByPrefix(AI_DATA_PREFIX);
+    }
+}
+
+// ============================================
 // Utility exports
 // ============================================
 

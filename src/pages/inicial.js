@@ -24,6 +24,7 @@ import { renderExpandableCard, expandableCardStyles, setupAutocomplete, setupQua
 import { renderActionModals, actionButtonsStyles, setupActionButtons } from '../components/actionModals.js';
 import { icons } from '../utils/icons.js';
 import { logAction } from '../services/auditLogger.js';
+import { invalidateAICache, invalidateFOCache } from '../services/cacheService.js';
 
 let allFOs = [];
 let studentDataCache = {};
@@ -437,6 +438,10 @@ async function saveCardChanges(foId, card) {
       await logAction('update', 'fatosObservados', foId, previousData, fullNewData);
     }
 
+    // Invalidate caches
+    invalidateFOCache(foId);
+    invalidateAICache(); // Invalidate all AI cached data
+
     showToast('Alterações salvas com sucesso', 'success');
     card.classList.remove('expanded');
 
@@ -471,6 +476,10 @@ async function transferFO(foId, newStatus) {
       await logAction('update', 'fatosObservados', foId, previousData, { ...previousData, ...updates });
     }
 
+    // Invalidate caches
+    invalidateFOCache(foId);
+    invalidateAICache();
+
     showToast('FO transferido com sucesso', 'success');
 
     // Refresh the list
@@ -503,6 +512,10 @@ async function deleteFO(foId) {
     if (previousData) {
       await logAction('delete', 'fatosObservados', foId, previousData, { ...previousData, ...updates });
     }
+
+    // Invalidate caches
+    invalidateFOCache(foId);
+    invalidateAICache();
 
     showToast('FO movido para GLPI', 'success');
 
