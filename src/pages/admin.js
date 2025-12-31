@@ -376,14 +376,21 @@ export async function renderAdminPage() {
         </div>
         <div class="card__body">
           <p style="color: var(--text-secondary); margin-bottom: var(--space-4);">
-            Configure as API keys do Google Gemini para cada companhia. Cada companhia usa sua própria API key para distribuir o uso do tier gratuito.
+            Configure a API key do provedor de IA. Recomendamos <strong>Groq</strong> por ter limite maior (14.400 req/dia).
           </p>
-          
+
+          <div class="alert alert--success" style="margin-bottom: var(--space-4);">
+            <div class="alert__icon">${icons.check}</div>
+            <div class="alert__content">
+              <p><strong>Groq (Recomendado):</strong> 14.400 requisições/dia GRÁTIS! Modelos Llama 3.3 70B.</p>
+              <p>Obtenha sua API key em: <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a></p>
+            </div>
+          </div>
+
           <div class="alert alert--info" style="margin-bottom: var(--space-4);">
             <div class="alert__icon">${icons.info}</div>
             <div class="alert__content">
-              <p><strong>Tier Gratuito:</strong> Gemini 2.5 Flash-Lite oferece 1.000 requisições/dia por API key.</p>
-              <p><strong>Importante:</strong> Após criar a API key, selecione o modelo "2.5 Flash Lite" e salve as configurações.</p>
+              <p><strong>Google Gemini (Alternativo):</strong> 1.500 requisições/dia.</p>
               <p>Obtenha sua API key em: <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a></p>
             </div>
           </div>
@@ -1337,29 +1344,53 @@ async function loadAIConfigs() {
     container.innerHTML = `
       <form id="ai-configs-form">
         <div style="display: grid; gap: var(--space-4);">
-          ${AI_COMPANIES.map(company => `
-            <div style="display: grid; grid-template-columns: 200px 1fr 150px auto; gap: var(--space-3); align-items: center; padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
-              <label style="font-weight: var(--font-weight-medium);">${company.label}</label>
-              <input type="password" 
-                     class="form-input ai-api-key" 
-                     id="ai-key-${company.id}" 
-                     data-company="${company.id}"
-                     placeholder="Cole a API key aqui..."
-                     value="${configs[company.id]?.apiKey || ''}"
-                     style="font-family: monospace;">
-              <select class="form-select ai-model" id="ai-model-${company.id}" data-company="${company.id}">
-                <option value="gemini-2.0-flash" ${configs[company.id]?.model === 'gemini-2.0-flash' || !configs[company.id]?.model ? 'selected' : ''}>2.0 Flash (1500/dia - Recomendado)</option>
-                <option value="gemini-2.5-flash-lite" ${configs[company.id]?.model === 'gemini-2.5-flash-lite' ? 'selected' : ''}>2.5 Flash Lite (1000/dia)</option>
-                <option value="gemini-2.5-flash" ${configs[company.id]?.model === 'gemini-2.5-flash' ? 'selected' : ''}>2.5 Flash (250/dia)</option>
-                <option value="gemini-2.5-pro" ${configs[company.id]?.model === 'gemini-2.5-pro' ? 'selected' : ''}>2.5 Pro (100/dia - Avançado)</option>
-              </select>
-              <span class="ai-config-status" id="ai-status-${company.id}">
-                ${configs[company.id]?.apiKey ? '✅' : '❌'}
-              </span>
+          ${AI_COMPANIES.map(company => {
+            const config = configs[company.id] || {};
+            const provider = config.provider || 'groq';
+            const isGroq = provider === 'groq';
+
+            return `
+            <div style="padding: var(--space-4); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-light);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+                <label style="font-weight: var(--font-weight-bold); font-size: var(--font-size-lg);">${company.label}</label>
+                <span class="ai-config-status" id="ai-status-${company.id}">
+                  ${config.apiKey ? '✅ Configurado' : '❌ Não configurado'}
+                </span>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 150px 1fr; gap: var(--space-3); align-items: center;">
+                <label style="font-weight: var(--font-weight-medium);">Provedor:</label>
+                <select class="form-select ai-provider" id="ai-provider-${company.id}" data-company="${company.id}">
+                  <option value="groq" ${isGroq ? 'selected' : ''}>Groq (14.400/dia - Recomendado)</option>
+                  <option value="gemini" ${!isGroq ? 'selected' : ''}>Google Gemini (1.500/dia)</option>
+                </select>
+
+                <label style="font-weight: var(--font-weight-medium);">API Key:</label>
+                <input type="password"
+                       class="form-input ai-api-key"
+                       id="ai-key-${company.id}"
+                       data-company="${company.id}"
+                       placeholder="${isGroq ? 'gsk_...' : 'AIza...'}"
+                       value="${config.apiKey || ''}"
+                       style="font-family: monospace;">
+
+                <label style="font-weight: var(--font-weight-medium);">Modelo:</label>
+                <select class="form-select ai-model" id="ai-model-${company.id}" data-company="${company.id}">
+                  <optgroup label="Groq (Recomendado)" id="ai-models-groq-${company.id}" ${!isGroq ? 'style="display:none"' : ''}>
+                    <option value="llama-3.3-70b-versatile" ${config.model === 'llama-3.3-70b-versatile' || (isGroq && !config.model) ? 'selected' : ''}>Llama 3.3 70B (Recomendado)</option>
+                    <option value="llama-3.1-8b-instant" ${config.model === 'llama-3.1-8b-instant' ? 'selected' : ''}>Llama 3.1 8B (Rápido)</option>
+                    <option value="mixtral-8x7b-32768" ${config.model === 'mixtral-8x7b-32768' ? 'selected' : ''}>Mixtral 8x7B</option>
+                  </optgroup>
+                  <optgroup label="Google Gemini" id="ai-models-gemini-${company.id}" ${isGroq ? 'style="display:none"' : ''}>
+                    <option value="gemini-2.0-flash" ${config.model === 'gemini-2.0-flash' || (!isGroq && !config.model) ? 'selected' : ''}>Gemini 2.0 Flash</option>
+                    <option value="gemini-2.5-flash-lite" ${config.model === 'gemini-2.5-flash-lite' ? 'selected' : ''}>Gemini 2.5 Flash Lite</option>
+                  </optgroup>
+                </select>
+              </div>
             </div>
-          `).join('')}
+          `;}).join('')}
         </div>
-        
+
         <div style="margin-top: var(--space-4); display: flex; gap: var(--space-3);">
           <button type="submit" class="btn btn--primary">
             ${icons.check} Salvar Configurações
@@ -1377,6 +1408,29 @@ async function loadAIConfigs() {
 
     const testBtn = document.getElementById('test-ai-btn');
     testBtn.addEventListener('click', testAIConnection);
+
+    // Setup provider change events
+    document.querySelectorAll('.ai-provider').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const company = e.target.dataset.company;
+        const isGroq = e.target.value === 'groq';
+
+        // Update placeholder
+        const keyInput = document.getElementById(`ai-key-${company}`);
+        keyInput.placeholder = isGroq ? 'gsk_...' : 'AIza...';
+
+        // Show/hide model groups
+        const groqGroup = document.getElementById(`ai-models-groq-${company}`);
+        const geminiGroup = document.getElementById(`ai-models-gemini-${company}`);
+
+        if (groqGroup) groqGroup.style.display = isGroq ? '' : 'none';
+        if (geminiGroup) geminiGroup.style.display = isGroq ? 'none' : '';
+
+        // Select default model for provider
+        const modelSelect = document.getElementById(`ai-model-${company}`);
+        modelSelect.value = isGroq ? 'llama-3.3-70b-versatile' : 'gemini-2.0-flash';
+      });
+    });
 
   } catch (error) {
     console.error('Error loading AI configs:', error);
@@ -1398,10 +1452,12 @@ async function saveAIConfigs(e) {
 
   try {
     for (const company of AI_COMPANIES) {
+      const provider = document.getElementById(`ai-provider-${company.id}`).value;
       const apiKey = document.getElementById(`ai-key-${company.id}`).value.trim();
       const model = document.getElementById(`ai-model-${company.id}`).value;
 
       const data = {
+        provider,
         apiKey,
         model,
         enabled: !!apiKey,
@@ -1411,7 +1467,7 @@ async function saveAIConfigs(e) {
       await setDoc(doc(db, 'aiConfigs', company.id), data, { merge: true });
 
       // Update status
-      document.getElementById(`ai-status-${company.id}`).textContent = apiKey ? '✅' : '❌';
+      document.getElementById(`ai-status-${company.id}`).textContent = apiKey ? '✅ Configurado' : '❌ Não configurado';
     }
 
     showToast('Configurações salvas com sucesso!', 'success');
@@ -1430,6 +1486,7 @@ async function testAIConnection() {
   btn.innerHTML = '<span class="spinner"></span> Testando...';
 
   // Test admin key first
+  const adminProvider = document.getElementById('ai-provider-admin').value;
   const adminKey = document.getElementById('ai-key-admin').value.trim();
   const adminModel = document.getElementById('ai-model-admin').value;
 
@@ -1441,17 +1498,37 @@ async function testAIConnection() {
   }
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${adminModel}:generateContent?key=${adminKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'Diga apenas: Conexão OK' }] }],
-        generationConfig: { maxOutputTokens: 50 }
-      })
-    });
+    let response;
+
+    if (adminProvider === 'groq') {
+      // Test Groq API
+      response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminKey}`
+        },
+        body: JSON.stringify({
+          model: adminModel,
+          messages: [{ role: 'user', content: 'Diga apenas: Conexão OK' }],
+          max_tokens: 50
+        })
+      });
+    } else {
+      // Test Gemini API
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${adminModel}:generateContent?key=${adminKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Diga apenas: Conexão OK' }] }],
+          generationConfig: { maxOutputTokens: 50 }
+        })
+      });
+    }
 
     if (response.ok) {
-      showToast('✅ Conexão com Gemini OK!', 'success');
+      const providerName = adminProvider === 'groq' ? 'Groq' : 'Gemini';
+      showToast(`✅ Conexão com ${providerName} OK!`, 'success');
     } else {
       const error = await response.json();
       showToast('❌ Erro: ' + (error.error?.message || 'Falha na conexão'), 'error');

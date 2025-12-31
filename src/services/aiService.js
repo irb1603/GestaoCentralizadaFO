@@ -1,4 +1,4 @@
-// AI Service - Gemini Integration
+// AI Service - Multi-Provider Integration (Groq + Gemini)
 // Gestão Centralizada FO - CMB
 
 import { db } from '../firebase/config.js';
@@ -15,30 +15,72 @@ import {
     serverTimestamp
 } from 'firebase/firestore';
 import { getSession } from '../firebase/auth.js';
-import { AI_CONFIGS_COLLECTION, AI_LOGS_COLLECTION, DEFAULT_AI_MODEL, AI_CONTEXT_DAYS, AI_CONFIG } from '../constants/aiConfig.js';
+import { AI_CONFIGS_COLLECTION, AI_LOGS_COLLECTION, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER, AI_PROVIDERS, AI_CONTEXT_DAYS, AI_CONFIG } from '../constants/aiConfig.js';
 import { generateSystemPrompt, generateContextPrompt, SUGGESTED_QUERIES } from '../utils/aiPrompts.js';
 import { getCachedAIData, cacheAIData, CACHE_TTL } from './cacheService.js';
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+/**
+ * API URLs for each provider
+ */
+const API_URLS = {
+    groq: 'https://api.groq.com/openai/v1/chat/completions',
+    gemini: 'https://generativelanguage.googleapis.com/v1beta/models'
+};
 
 /**
- * List of valid Gemini model IDs
- * Models must exist in Google's Gemini API
+ * Get the provider for a given model
+ * @param {string} model - Model ID
+ * @returns {string} Provider name ('groq' or 'gemini')
  */
-const VALID_MODELS = Object.keys(AI_CONFIG.models);
+function getProviderForModel(model) {
+    if (!model) return DEFAULT_AI_PROVIDER;
 
-/**
- * Validate and get a valid model ID
- * Falls back to DEFAULT_AI_MODEL if stored model is invalid
- * @param {string} model - Model ID to validate
- * @returns {string} Valid model ID
- */
-function getValidModel(model) {
-    if (model && VALID_MODELS.includes(model)) {
-        return model;
+    // Check in models config
+    const modelConfig = AI_CONFIG.models[model];
+    if (modelConfig?.provider) {
+        return modelConfig.provider;
     }
-    console.warn(`[AI] Invalid model "${model}", falling back to ${DEFAULT_AI_MODEL}`);
-    return DEFAULT_AI_MODEL;
+
+    // Infer from model name
+    if (model.startsWith('llama') || model.startsWith('mixtral')) {
+        return AI_PROVIDERS.GROQ;
+    }
+    if (model.startsWith('gemini')) {
+        return AI_PROVIDERS.GEMINI;
+    }
+
+    return DEFAULT_AI_PROVIDER;
+}
+
+/**
+ * Get default model for a provider
+ * @param {string} provider - Provider name
+ * @returns {string} Default model ID
+ */
+function getDefaultModelForProvider(provider) {
+    return DEFAULT_AI_MODEL[provider] || DEFAULT_AI_MODEL.groq;
+}
+
+/**
+ * Validate and get a valid model/provider combination
+ * @param {string} model - Model ID to validate
+ * @param {string} provider - Provider name
+ * @returns {{model: string, provider: string}} Valid model and provider
+ */
+function getValidConfig(model, provider) {
+    // If provider is specified, use it; otherwise infer from model
+    const effectiveProvider = provider || getProviderForModel(model);
+
+    // Validate model exists for provider
+    const providerConfig = AI_CONFIG.providers[effectiveProvider];
+    if (providerConfig?.models && model && providerConfig.models[model]) {
+        return { model, provider: effectiveProvider };
+    }
+
+    // Fallback to default model for provider
+    const defaultModel = getDefaultModelForProvider(effectiveProvider);
+    console.warn(`[AI] Invalid model "${model}" for provider "${effectiveProvider}", using ${defaultModel}`);
+    return { model: defaultModel, provider: effectiveProvider };
 }
 
 // Cache for AI config (avoid repeated Firebase reads)
@@ -112,6 +154,73 @@ function getCompanyFilter() {
 }
 
 /**
+ * Call Groq API (OpenAI-compatible)
+ * @param {string} apiKey - Groq API key
+ * @param {string} model - Model name (e.g., llama-3.3-70b-versatile)
+ * @param {string} systemPrompt - System prompt
+ * @param {string} userMessage - User message
+ * @param {string} contextData - Additional context
+ * @returns {Promise<string>} AI response
+ */
+async function callGroqAPI(apiKey, model, systemPrompt, userMessage, contextData = '') {
+    const fullUserMessage = contextData
+        ? `DADOS ATUAIS DO SISTEMA:\n${contextData}\n\nPERGUNTA DO USUÁRIO: ${userMessage}`
+        : userMessage;
+
+    console.log(`[AI] Calling Groq API with model: ${model}`);
+
+    const response = await fetch(API_URLS.groq, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: fullUserMessage }
+            ],
+            temperature: 0.7,
+            max_tokens: 2048,
+            top_p: 0.95
+        })
+    });
+
+    console.log(`[AI] Groq response status: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+        let errorMessage = 'Erro na API do Groq';
+        try {
+            const error = await response.json();
+            console.error('[AI] Groq API Error:', error);
+            const apiError = error.error?.message || '';
+
+            if (response.status === 401) {
+                errorMessage = 'API key Groq inválida. Obtenha uma em console.groq.com';
+            } else if (response.status === 429) {
+                errorMessage = 'Limite de requisições Groq atingido. Aguarde alguns segundos.';
+            } else if (response.status === 400) {
+                errorMessage = `Erro na requisição: ${apiError || 'Parâmetros inválidos'}`;
+            } else if (apiError) {
+                errorMessage = apiError;
+            }
+        } catch (parseError) {
+            errorMessage = `Erro ${response.status}: ${response.statusText || 'Falha na comunicação'}`;
+        }
+        throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+
+    if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content;
+    }
+
+    throw new Error('Resposta inválida do Groq');
+}
+
+/**
  * Call Gemini API
  * @param {string} apiKey - Gemini API key
  * @param {string} model - Model name
@@ -125,8 +234,8 @@ async function callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextDa
         ? `${systemPrompt}\n\nDADOS ATUAIS DO SISTEMA:\n${contextData}\n\nPERGUNTA DO USUÁRIO: ${userMessage}`
         : `${systemPrompt}\n\nPERGUNTA DO USUÁRIO: ${userMessage}`;
 
-    const apiUrl = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
-    console.log(`[AI] Calling Gemini API: ${GEMINI_API_URL}/${model}:generateContent`);
+    const apiUrl = `${API_URLS.gemini}/${model}:generateContent?key=${apiKey}`;
+    console.log(`[AI] Calling Gemini API: ${API_URLS.gemini}/${model}:generateContent`);
 
     const response = await fetch(apiUrl, {
         method: 'POST',
@@ -154,16 +263,15 @@ async function callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextDa
         })
     });
 
-    console.log(`[AI] Response status: ${response.status} ${response.statusText}`);
+    console.log(`[AI] Gemini response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
         let errorMessage = 'Erro na API do Gemini';
         try {
             const error = await response.json();
-            console.error('[AI] API Error:', error);
+            console.error('[AI] Gemini API Error:', error);
             const apiError = error.error?.message || '';
 
-            // Translate common API errors to Portuguese
             if (response.status === 404) {
                 errorMessage = `Modelo "${model}" não encontrado. Verifique as configurações de IA.`;
             } else if (response.status === 401 || response.status === 403) {
@@ -176,7 +284,6 @@ async function callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextDa
                 errorMessage = apiError;
             }
         } catch (parseError) {
-            // Failed to parse error response
             errorMessage = `Erro ${response.status}: ${response.statusText || 'Falha na comunicação com a API'}`;
         }
         throw new Error(errorMessage);
@@ -189,6 +296,24 @@ async function callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextDa
     }
 
     throw new Error('Resposta inválida do Gemini');
+}
+
+/**
+ * Call AI API based on provider
+ * @param {string} provider - Provider name ('groq' or 'gemini')
+ * @param {string} apiKey - API key
+ * @param {string} model - Model name
+ * @param {string} systemPrompt - System prompt
+ * @param {string} userMessage - User message
+ * @param {string} contextData - Additional context
+ * @returns {Promise<string>} AI response
+ */
+async function callAI(provider, apiKey, model, systemPrompt, userMessage, contextData = '') {
+    if (provider === AI_PROVIDERS.GROQ) {
+        return callGroqAPI(apiKey, model, systemPrompt, userMessage, contextData);
+    } else {
+        return callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextData);
+    }
 }
 
 /**
@@ -1455,12 +1580,23 @@ export async function chatWithAI(userMessage) {
     try {
         // Get AI configuration
         const config = await getAIConfig();
-        const model = config.model || DEFAULT_AI_MODEL;
-        const apiKey = config.apiKey;
+
+        // Get provider and model from config, with smart defaults
+        const storedProvider = config.provider || DEFAULT_AI_PROVIDER;
+        const storedModel = config.model;
+
+        // Validate and get effective config
+        const { model, provider } = getValidConfig(storedModel, storedProvider);
+
+        // Get API key (check for provider-specific key first)
+        const apiKey = config[`${provider}ApiKey`] || config.apiKey;
 
         if (!apiKey) {
-            throw new Error('API key não configurada. Contate o administrador.');
+            const providerName = provider === AI_PROVIDERS.GROQ ? 'Groq' : 'Gemini';
+            throw new Error(`API key ${providerName} não configurada. Configure em Admin > IA.`);
         }
+
+        console.log(`[AI] Using provider: ${provider}, model: ${model}`);
 
         // Generate system prompt
         const systemPrompt = generateSystemPrompt(session);
@@ -1469,8 +1605,8 @@ export async function chatWithAI(userMessage) {
         const contextData = await gatherContextData(userMessage);
         const formattedContext = formatContextForPrompt(contextData);
 
-        // Call Gemini API
-        const response = await callGeminiAPI(apiKey, model, systemPrompt, userMessage, formattedContext);
+        // Call AI API (routes to correct provider)
+        const response = await callAI(provider, apiKey, model, systemPrompt, userMessage, formattedContext);
 
         // Log conversation
         await logConversation(userMessage, response, model);

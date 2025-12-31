@@ -2,43 +2,92 @@
 // Gestão Centralizada FO - CMB
 
 /**
- * Default Gemini Model to use
- * gemini-2.0-flash has the HIGHEST free tier limits (1500 RPD, 10 RPM)
- * Updated Dec 2025 with correct Google Gemini API model IDs
- * See: https://ai.google.dev/gemini-api/docs/rate-limits
+ * Available AI Providers
+ * GROQ is recommended: 14,400 requests/day (FREE), fastest inference
+ * GEMINI: 1,500 requests/day (FREE) but often hits rate limits
  */
-export const DEFAULT_AI_MODEL = 'gemini-2.0-flash';
+export const AI_PROVIDERS = {
+    GROQ: 'groq',
+    GEMINI: 'gemini'
+};
+
+/**
+ * Default AI Provider - GROQ recommended for higher limits
+ */
+export const DEFAULT_AI_PROVIDER = AI_PROVIDERS.GROQ;
+
+/**
+ * Default Model per provider
+ */
+export const DEFAULT_AI_MODEL = {
+    groq: 'llama-3.3-70b-versatile',
+    gemini: 'gemini-2.0-flash'
+};
 
 /**
  * AI Configuration per company
  * API keys should be stored in Firebase for security
- * This is the fallback/reference structure
  *
- * IMPORTANT: Model IDs must match Google's official Gemini API model names
- * See: https://ai.google.dev/gemini-api/docs/models
- * Rate limits: https://ai.google.dev/gemini-api/docs/rate-limits
+ * GROQ: https://console.groq.com - 14,400 req/day FREE
+ * GEMINI: https://aistudio.google.com - 1,500 req/day FREE
  */
 export const AI_CONFIG = {
-    models: {
-        'gemini-2.0-flash': {
-            name: 'Gemini 2.0 Flash (Recomendado - Maior Limite)',
+    providers: {
+        groq: {
+            name: 'Groq (Recomendado - 14.400/dia)',
+            apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
+            freeLimit: { rpd: 14400, rpm: 30 },
+            models: {
+                'llama-3.3-70b-versatile': {
+                    name: 'Llama 3.3 70B (Recomendado)',
+                    freeLimit: { rpd: 14400, rpm: 30 },
+                    contextWindow: 128000
+                },
+                'llama-3.1-8b-instant': {
+                    name: 'Llama 3.1 8B (Rápido)',
+                    freeLimit: { rpd: 14400, rpm: 30 },
+                    contextWindow: 128000
+                },
+                'mixtral-8x7b-32768': {
+                    name: 'Mixtral 8x7B',
+                    freeLimit: { rpd: 14400, rpm: 30 },
+                    contextWindow: 32768
+                }
+            }
+        },
+        gemini: {
+            name: 'Google Gemini (1.500/dia)',
+            apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
             freeLimit: { rpd: 1500, rpm: 10 },
-            pricing: { input: 0.10, output: 0.40 }
+            models: {
+                'gemini-2.0-flash': {
+                    name: 'Gemini 2.0 Flash',
+                    freeLimit: { rpd: 1500, rpm: 10 }
+                },
+                'gemini-2.5-flash-lite': {
+                    name: 'Gemini 2.5 Flash Lite',
+                    freeLimit: { rpd: 1000, rpm: 15 }
+                }
+            }
+        }
+    },
+
+    // Legacy support - models list for backwards compatibility
+    models: {
+        'llama-3.3-70b-versatile': {
+            name: 'Groq Llama 3.3 70B (14.400/dia)',
+            provider: 'groq',
+            freeLimit: { rpd: 14400, rpm: 30 }
         },
-        'gemini-2.5-flash-lite': {
-            name: 'Gemini 2.5 Flash Lite (1000/dia)',
-            freeLimit: { rpd: 1000, rpm: 15 },
-            pricing: { input: 0.075, output: 0.30 }
+        'llama-3.1-8b-instant': {
+            name: 'Groq Llama 3.1 8B (14.400/dia)',
+            provider: 'groq',
+            freeLimit: { rpd: 14400, rpm: 30 }
         },
-        'gemini-2.5-flash': {
-            name: 'Gemini 2.5 Flash (250/dia)',
-            freeLimit: { rpd: 250, rpm: 10 },
-            pricing: { input: 0.15, output: 0.60 }
-        },
-        'gemini-2.5-pro': {
-            name: 'Gemini 2.5 Pro (100/dia - Avançado)',
-            freeLimit: { rpd: 100, rpm: 5 },
-            pricing: { input: 1.25, output: 5.00 }
+        'gemini-2.0-flash': {
+            name: 'Gemini 2.0 Flash (1.500/dia)',
+            provider: 'gemini',
+            freeLimit: { rpd: 1500, rpm: 10 }
         }
     },
 
