@@ -383,6 +383,7 @@ export async function renderAdminPage() {
             <div class="alert__icon">${icons.info}</div>
             <div class="alert__content">
               <p><strong>Tier Gratuito:</strong> Gemini 2.5 Flash-Lite oferece 1.000 requisições/dia por API key.</p>
+              <p><strong>Importante:</strong> Após criar a API key, selecione o modelo "2.5 Flash Lite" e salve as configurações.</p>
               <p>Obtenha sua API key em: <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a></p>
             </div>
           </div>
@@ -1347,8 +1348,9 @@ async function loadAIConfigs() {
                      value="${configs[company.id]?.apiKey || ''}"
                      style="font-family: monospace;">
               <select class="form-select ai-model" id="ai-model-${company.id}" data-company="${company.id}">
-                <option value="gemini-2.0-flash-lite" ${configs[company.id]?.model === 'gemini-2.0-flash-lite' ? 'selected' : ''}>Flash Lite (Free)</option>
-                <option value="gemini-2.0-flash" ${configs[company.id]?.model === 'gemini-2.0-flash' ? 'selected' : ''}>Flash</option>
+                <option value="gemini-2.5-flash-lite" ${configs[company.id]?.model === 'gemini-2.5-flash-lite' || !configs[company.id]?.model ? 'selected' : ''}>2.5 Flash Lite (Recomendado)</option>
+                <option value="gemini-2.5-flash" ${configs[company.id]?.model === 'gemini-2.5-flash' ? 'selected' : ''}>2.5 Flash</option>
+                <option value="gemini-2.0-flash" ${configs[company.id]?.model === 'gemini-2.0-flash' ? 'selected' : ''}>2.0 Flash</option>
               </select>
               <span class="ai-config-status" id="ai-status-${company.id}">
                 ${configs[company.id]?.apiKey ? '✅' : '❌'}

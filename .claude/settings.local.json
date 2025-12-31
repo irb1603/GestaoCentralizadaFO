@@ -25,7 +25,14 @@
       "Bash(open \"https://console.firebase.google.com/project/gestaocentralizadafo/firestore/databases/-default-/rules\")",
       "Bash(open \"https://console.firebase.google.com/project/gestaocentralizadafo/firestore/databases/-default-/data/~2Fusers~2FAdmin\")",
       "Bash(git pull:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(npm run dev:*)",
+      "Bash(open http://localhost:5173)",
+      "WebSearch"
     ]
   }
 }

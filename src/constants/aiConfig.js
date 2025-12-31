@@ -5,7 +5,7 @@
  * Default Gemini Model to use
  * gemini-2.5-flash-lite is recommended for free tier (1000 req/day)
  */
-export const DEFAULT_AI_MODEL = 'gemini-2.0-flash-lite';
+export const DEFAULT_AI_MODEL = 'gemini-2.5-flash-lite';
 
 /**
  * AI Configuration per company
@@ -14,15 +14,20 @@ export const DEFAULT_AI_MODEL = 'gemini-2.0-flash-lite';
  */
 export const AI_CONFIG = {
     models: {
-        'gemini-2.0-flash-lite': {
-            name: 'Gemini 2.0 Flash Lite',
+        'gemini-2.5-flash-lite': {
+            name: 'Gemini 2.5 Flash Lite',
             freeLimit: { rpd: 1000, rpm: 30 },
-            pricing: { input: 0.10, output: 0.40 } // per million tokens
+            pricing: { input: 0.075, output: 0.30 } // per million tokens
+        },
+        'gemini-2.5-flash': {
+            name: 'Gemini 2.5 Flash',
+            freeLimit: { rpd: 500, rpm: 15 },
+            pricing: { input: 0.15, output: 0.60 }
         },
         'gemini-2.0-flash': {
             name: 'Gemini 2.0 Flash',
-            freeLimit: { rpd: 20, rpm: 2 },
-            pricing: { input: 0.30, output: 2.50 }
+            freeLimit: { rpd: 1500, rpm: 15 },
+            pricing: { input: 0.10, output: 0.40 }
         }
     },
 
