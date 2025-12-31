@@ -1453,7 +1453,8 @@ async function saveAIConfigs(e) {
   try {
     for (const company of AI_COMPANIES) {
       const provider = document.getElementById(`ai-provider-${company.id}`).value;
-      const apiKey = document.getElementById(`ai-key-${company.id}`).value.trim();
+      const apiKeyRaw = document.getElementById(`ai-key-${company.id}`).value;
+      const apiKey = apiKeyRaw.trim().replace(/\s+/g, ''); // Remove ALL whitespace
       const model = document.getElementById(`ai-model-${company.id}`).value;
 
       const data = {
@@ -1487,7 +1488,8 @@ async function testAIConnection() {
 
   // Test admin key first
   const adminProvider = document.getElementById('ai-provider-admin').value;
-  const adminKey = document.getElementById('ai-key-admin').value.trim();
+  const adminKeyRaw = document.getElementById('ai-key-admin').value;
+  const adminKey = adminKeyRaw.trim().replace(/\s+/g, ''); // Remove ALL whitespace
   const adminModel = document.getElementById('ai-model-admin').value;
 
   if (!adminKey) {
@@ -1497,11 +1499,24 @@ async function testAIConnection() {
     return;
   }
 
+  // Validate Groq key format
+  if (adminProvider === 'groq' && !adminKey.startsWith('gsk_')) {
+    showToast('❌ API key Groq deve começar com "gsk_"', 'warning');
+    btn.disabled = false;
+    btn.innerHTML = `${icons.refresh} Testar Conexão`;
+    return;
+  }
+
   try {
     let response;
 
+    console.log(`[AI Test] Provider: ${adminProvider}, Model: ${adminModel}`);
+    console.log(`[AI Test] API Key length: ${adminKey.length}, starts with: ${adminKey.substring(0, 10)}...`);
+    console.log(`[AI Test] Raw key length: ${adminKeyRaw.length}, trimmed: ${adminKey.length}`);
+
     if (adminProvider === 'groq') {
       // Test Groq API
+      console.log('[AI Test] Calling Groq API...');
       response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -1510,12 +1525,13 @@ async function testAIConnection() {
         },
         body: JSON.stringify({
           model: adminModel,
-          messages: [{ role: 'user', content: 'Diga apenas: Conexão OK' }],
-          max_tokens: 50
+          messages: [{ role: 'user', content: 'Diga apenas: OK' }],
+          max_tokens: 10
         })
       });
     } else {
       // Test Gemini API
+      console.log('[AI Test] Calling Gemini API...');
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${adminModel}:generateContent?key=${adminKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1526,14 +1542,21 @@ async function testAIConnection() {
       });
     }
 
+    console.log(`[AI Test] Response status: ${response.status}`);
+
     if (response.ok) {
+      const data = await response.json();
+      console.log('[AI Test] Success:', data);
       const providerName = adminProvider === 'groq' ? 'Groq' : 'Gemini';
       showToast(`✅ Conexão com ${providerName} OK!`, 'success');
     } else {
-      const error = await response.json();
-      showToast('❌ Erro: ' + (error.error?.message || 'Falha na conexão'), 'error');
+      const errorData = await response.json();
+      console.error('[AI Test] Error response:', errorData);
+      const errorMsg = errorData.error?.message || JSON.stringify(errorData);
+      showToast(`❌ Erro ${response.status}: ${errorMsg}`, 'error');
     }
   } catch (error) {
+    console.error('[AI Test] Network error:', error);
     showToast('❌ Erro de rede: ' + error.message, 'error');
   } finally {
     btn.disabled = false;

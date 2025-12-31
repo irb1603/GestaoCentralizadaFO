@@ -120,9 +120,7 @@ async function getAIConfig() {
 
         if (configSnap.exists()) {
             const config = configSnap.data();
-            // Validate model and fallback if invalid
-            config.model = getValidModel(config.model);
-            console.log(`[AI] Using model: ${config.model} for ${configKey}`);
+            console.log(`[AI] Loaded config for ${configKey}: provider=${config.provider}, model=${config.model}`);
 
             // Cache the config for 30 minutes
             cacheAIData(cacheKey, config, configKey, AI_CONFIG_CACHE_TTL);
@@ -168,6 +166,7 @@ async function callGroqAPI(apiKey, model, systemPrompt, userMessage, contextData
         : userMessage;
 
     console.log(`[AI] Calling Groq API with model: ${model}`);
+    console.log(`[AI] API Key being used: ${apiKey.substring(0, 15)}... (length: ${apiKey.length})`);
 
     const response = await fetch(API_URLS.groq, {
         method: 'POST',
@@ -194,10 +193,14 @@ async function callGroqAPI(apiKey, model, systemPrompt, userMessage, contextData
         try {
             const error = await response.json();
             console.error('[AI] Groq API Error:', error);
+            console.error('[AI] Response status:', response.status);
+            console.error('[AI] Response headers:', Object.fromEntries(response.headers.entries()));
             const apiError = error.error?.message || '';
+            const errorCode = error.error?.code || '';
 
             if (response.status === 401) {
-                errorMessage = 'API key Groq inválida. Obtenha uma em console.groq.com';
+                // Show actual error from Groq for debugging
+                errorMessage = `API key Groq inválida (${errorCode}): ${apiError || 'Verifique se a key está correta'}`;
             } else if (response.status === 429) {
                 errorMessage = 'Limite de requisições Groq atingido. Aguarde alguns segundos.';
             } else if (response.status === 400) {
@@ -206,6 +209,7 @@ async function callGroqAPI(apiKey, model, systemPrompt, userMessage, contextData
                 errorMessage = apiError;
             }
         } catch (parseError) {
+            console.error('[AI] Failed to parse error response:', parseError);
             errorMessage = `Erro ${response.status}: ${response.statusText || 'Falha na comunicação'}`;
         }
         throw new Error(errorMessage);
@@ -1589,12 +1593,16 @@ export async function chatWithAI(userMessage) {
         const { model, provider } = getValidConfig(storedModel, storedProvider);
 
         // Get API key (check for provider-specific key first)
-        const apiKey = config[`${provider}ApiKey`] || config.apiKey;
+        let apiKey = config[`${provider}ApiKey`] || config.apiKey;
 
         if (!apiKey) {
             const providerName = provider === AI_PROVIDERS.GROQ ? 'Groq' : 'Gemini';
             throw new Error(`API key ${providerName} não configurada. Configure em Admin > IA.`);
         }
+
+        // Clean up API key (remove any whitespace that may have been added)
+        apiKey = apiKey.trim().replace(/\s+/g, '');
+        console.log(`[AI] API Key length: ${apiKey.length}, starts with: ${apiKey.substring(0, 10)}...`);
 
         console.log(`[AI] Using provider: ${provider}, model: ${model}`);
 
