@@ -41,8 +41,13 @@ function getValidModel(model) {
     return DEFAULT_AI_MODEL;
 }
 
+// Cache for AI config (avoid repeated Firebase reads)
+const AI_CONFIG_CACHE_KEY = 'aiConfig';
+const AI_CONFIG_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
 /**
  * Get AI API key for the current user's company
+ * OPTIMIZED: Uses cache to avoid repeated Firebase reads
  * @returns {Promise<Object>} API configuration
  */
 async function getAIConfig() {
@@ -57,8 +62,17 @@ async function getAIConfig() {
         configKey = 'admin';
     }
 
+    // OPTIMIZATION: Check cache first to avoid Firebase reads
+    const cacheKey = `${AI_CONFIG_CACHE_KEY}_${configKey}`;
+    const cached = getCachedAIData(cacheKey, configKey);
+    if (cached) {
+        console.log(`[AI] Using cached config for ${configKey}`);
+        return cached;
+    }
+
     try {
-        // Try to get config from Firebase
+        // Try to get config from Firebase (only if not cached)
+        console.log(`[AI] Fetching config from Firebase for ${configKey}`);
         const configRef = doc(db, AI_CONFIGS_COLLECTION, configKey);
         const configSnap = await getDoc(configRef);
 
@@ -67,6 +81,10 @@ async function getAIConfig() {
             // Validate model and fallback if invalid
             config.model = getValidModel(config.model);
             console.log(`[AI] Using model: ${config.model} for ${configKey}`);
+
+            // Cache the config for 30 minutes
+            cacheAIData(cacheKey, config, configKey, AI_CONFIG_CACHE_TTL);
+
             return config;
         }
 

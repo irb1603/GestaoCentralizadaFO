@@ -26,10 +26,16 @@ async function init() {
   // Render main layout
   renderMainLayout(currentPage);
 
-  // OPTIMIZATION: Warm cache in background while page loads
-  // This preloads common data to minimize Firebase reads
-  const companyFilter = getCompanyFilter();
-  warmCacheInBackground(companyFilter);
+  // OPTIMIZATION: Warm cache ONLY ONCE per session (not on every navigation)
+  // Check sessionStorage to prevent duplicate warming during hot-reload
+  const cacheWarmKey = 'cmb_cache_warmed_session';
+  const alreadyWarmed = sessionStorage.getItem(cacheWarmKey);
+
+  if (!alreadyWarmed) {
+    const companyFilter = getCompanyFilter();
+    warmCacheInBackground(companyFilter);
+    sessionStorage.setItem(cacheWarmKey, Date.now().toString());
+  }
 
   // Load page content
   await loadPage(currentPage);
@@ -47,6 +53,7 @@ async function init() {
 
 /**
  * Warm cache in background without blocking page load
+ * OPTIMIZED: Reduced limit to minimize Firebase reads
  * @param {string|null} companyFilter - Company filter
  */
 async function warmCacheInBackground(companyFilter) {
@@ -55,11 +62,11 @@ async function warmCacheInBackground(companyFilter) {
     const { getStudents, getFatosObservados } = await import('./firebase/database.js');
 
     // Warm cache with fetchers for students and FOs
-    // getStudents() respects company filter automatically via getCompanyFilter()
-    // getFatosObservados() accepts filters object
+    // OPTIMIZATION: Reduced from 500 to 100 FOs to minimize initial reads
+    // Most users only need recent FOs anyway
     await warmCache(
       getStudents,
-      () => getFatosObservados({ limit: 500 }),
+      () => getFatosObservados({ limit: 100 }),
       companyFilter
     );
   } catch (error) {

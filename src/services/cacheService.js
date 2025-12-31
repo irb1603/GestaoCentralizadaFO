@@ -531,17 +531,40 @@ export function clearPersistentCache() {
 let cacheWarmingPromise = null;
 let cacheWarmed = false;
 
+// Session storage key to persist warming state across hot-reloads
+const CACHE_WARMED_SESSION_KEY = 'cmb_cache_warming_done';
+
 /**
  * Preload critical data into cache on app start
  * This reduces Firebase reads by loading common data once
+ * OPTIMIZED: Uses sessionStorage to prevent duplicate warming during hot-reload
  * @param {Function} getStudentsFn - Function to get students
  * @param {Function} getFOsFn - Function to get FOs
  * @param {string} companyFilter - Company filter or null
  */
 export async function warmCache(getStudentsFn, getFOsFn, companyFilter) {
-    // Prevent duplicate warming
+    // Prevent duplicate warming (in-memory check)
     if (cacheWarmingPromise) {
+        console.log('[Cache] Warming already in progress, waiting...');
         return cacheWarmingPromise;
+    }
+
+    // Check sessionStorage to prevent warming during hot-reload
+    // This persists across module reloads in development
+    try {
+        const sessionWarmed = sessionStorage.getItem(CACHE_WARMED_SESSION_KEY);
+        if (sessionWarmed) {
+            const warmedTime = parseInt(sessionWarmed);
+            const elapsed = Date.now() - warmedTime;
+            // Only skip if warmed less than 5 minutes ago
+            if (elapsed < 5 * 60 * 1000) {
+                console.log('[Cache] Already warmed this session, skipping');
+                cacheWarmed = true;
+                return;
+            }
+        }
+    } catch (e) {
+        // sessionStorage might not be available
     }
 
     if (cacheWarmed) {
@@ -588,6 +611,14 @@ export async function warmCache(getStudentsFn, getFOsFn, companyFilter) {
 
             await Promise.all(promises);
             cacheWarmed = true;
+
+            // Save to sessionStorage to prevent warming during hot-reload
+            try {
+                sessionStorage.setItem(CACHE_WARMED_SESSION_KEY, Date.now().toString());
+            } catch (e) {
+                // sessionStorage might not be available
+            }
+
             console.log('[Cache] Warming complete');
 
         } catch (error) {
