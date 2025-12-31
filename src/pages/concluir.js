@@ -142,7 +142,7 @@ export async function renderConcluirPage(container) {
 
           } catch (error) {
             console.error('Erro ao concluir FO:', error);
-            alert('Erro ao concluir FO: ' + error.message);
+            showToast('Erro ao concluir FO: ' + error.message, 'error');
             btn.disabled = false;
             btn.innerHTML = `${icons.check} Concluído`;
           }

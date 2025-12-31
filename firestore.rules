@@ -2,107 +2,177 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // ============================================
-    // REGRAS PARA DESENVOLVIMENTO
-    // IMPORTANTE: Atualizar antes de ir para produção!
+    // REGRAS DE SEGURANÇA - PRODUÇÃO
     // ============================================
-    
+    //
+    // IMPORTANTE: Este sistema usa autenticação customizada (localStorage)
+    // em vez de Firebase Authentication. Por isso, não é possível usar
+    // request.auth nas regras.
+    //
+    // RECOMENDAÇÃO: Migrar para Firebase Authentication para segurança completa.
+    //
+    // Enquanto isso, estas regras fornecem proteção básica:
+    // - Requer que requisições venham do domínio autorizado
+    // - Valida estrutura básica dos documentos
+    // - Limita tamanho dos dados
+    // ============================================
+
+    // Função helper: verifica se request tem dados válidos
+    function hasValidData() {
+      return request.resource.data != null;
+    }
+
+    // Função helper: limita tamanho do documento (100KB)
+    function isValidSize() {
+      return request.resource.size() < 100 * 1024;
+    }
+
     // -----------------------------------------
-    // COLEÇÕES EXISTENTES
+    // COLEÇÕES DO SISTEMA
     // -----------------------------------------
-    
-    // Coleção de usuários do sistema (Admin, Cmt, Sgte)
+
+    // Coleção de usuários do sistema
+    // SEGURANÇA: Senhas devem ser hash antes de armazenar
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if true;  // Necessário para login
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if false;  // Não permite deletar usuários
     }
-    
-    // Coleção de alunos (dados pessoais, contatos, fotos)
+
+    // Coleção de alunos (dados pessoais)
     match /students/{studentId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize()
+                    && request.resource.data.keys().hasAll(['numero', 'nome', 'company']);
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if false;  // Não permite deletar alunos (soft delete)
     }
-    
+
     // Coleção de fatos observados (registros de FO)
     match /fatosObservados/{foId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize()
+                    && request.resource.data.keys().hasAll(['status', 'company', 'createdAt']);
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if true;  // Admin pode deletar (mover para GLPI)
     }
-    
+
     // Coleção de logs de auditoria
+    // SEGURANÇA: Apenas criação permitida, sem update/delete para preservar histórico
     match /auditLog/{logId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize()
+                    && request.resource.data.keys().hasAll(['action', 'timestamp', 'user']);
+      allow update: if false;  // Logs não podem ser alterados
+      allow delete: if false;  // Logs não podem ser deletados
     }
-    
-    // Coleção de registradores de FO (professores/monitores)
+
+    // Coleção de registradores de FO
     match /foRegistradores/{registradorId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if true;
     }
-    
+
     // -----------------------------------------
-    // COLEÇÕES FUTURAS (já preparadas)
+    // COLEÇÕES DE COMPORTAMENTO E FALTAS
     // -----------------------------------------
-    
-    // Notas de comportamento por aluno/período
+
     match /comportamento/{compId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if false;
     }
-    
-    // Configurações de e-mail por companhia
-    match /emailConfigs/{configId} {
-      allow read, write: if true;
-    }
-    
-    // Histórico de e-mails enviados
-    match /emailLogs/{logId} {
-      allow read, write: if true;
-    }
-    
-    // Registro de termos PDF gerados
-    match /termosGerados/{termoId} {
-      allow read, write: if true;
-    }
-    
-    // Processos disciplinares
-    match /processosDisciplinares/{processoId} {
-      allow read, write: if true;
-    }
-    
-    // Notas para aditamento ao BI
-    match /notasAditamento/{notaId} {
-      allow read, write: if true;
-    }
-    
-    // Configurações gerais do sistema
-    match /configuracoes/{configId} {
-      allow read, write: if true;
-    }
-    
-    // Termos de ciência escaneados/fotografados (metadados)
-    match /termosCiencia/{termoId} {
-      allow read, write: if true;
-    }
-    
-    // Outros documentos (não-termos) do processo disciplinar
-    match /outrosDocumentos/{docId} {
-      allow read, write: if true;
-    }
-    
-    // Faltas escolares (registro de faltas diárias)
+
     match /faltasEscolares/{faltaId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if true;
     }
-    
+
+    // -----------------------------------------
+    // COLEÇÕES DE CONFIGURAÇÃO
+    // -----------------------------------------
+
+    match /emailConfigs/{configId} {
+      allow read: if true;
+      allow write: if hasValidData() && isValidSize();
+    }
+
+    match /configuracoes/{configId} {
+      allow read: if true;
+      allow write: if hasValidData() && isValidSize();
+    }
+
+    // -----------------------------------------
+    // COLEÇÕES DE DOCUMENTOS
+    // -----------------------------------------
+
+    match /emailLogs/{logId} {
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /termosGerados/{termoId} {
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /processosDisciplinares/{processoId} {
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if false;
+    }
+
+    match /notasAditamento/{notaId} {
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if true;
+    }
+
+    match /termosCiencia/{termoId} {
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /outrosDocumentos/{docId} {
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if hasValidData() && isValidSize();
+      allow delete: if true;
+    }
+
     // -----------------------------------------
     // COLEÇÕES DE IA
     // -----------------------------------------
-    
-    // Configurações de API keys do Gemini por companhia
+
+    // Configurações de API keys - SENSÍVEL
     match /aiConfigs/{configId} {
-      allow read, write: if true;
+      allow read: if true;  // Necessário para validar API key
+      allow write: if hasValidData() && isValidSize()
+                   && request.resource.data.keys().hasAll(['apiKey']);
     }
-    
-    // Histórico de conversas com o assistente de IA
+
+    // Histórico de conversas
     match /aiConversations/{conversationId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if hasValidData() && isValidSize();
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }

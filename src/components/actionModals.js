@@ -10,6 +10,7 @@ import { formatDate, COMPANY_NAMES, FO_STATUS } from '../constants/index.js';
 import { db } from '../firebase/config.js';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { logAction } from '../services/auditLogger.js';
+import { showToast } from '../utils/toast.js';
 
 /**
  * Render modal HTML for action buttons
@@ -326,7 +327,7 @@ export function setupActionButtons(allFOs, studentDataCache) {
     const fosFiltered = allFOs.filter(fo => fo.dataRegistro === dataRegistro);
 
     if (fosFiltered.length === 0) {
-      alert('Nenhum FO encontrado para essa data.');
+      showToast('Nenhum FO encontrado para essa data.', 'warning');
       return;
     }
 
@@ -351,7 +352,7 @@ export function setupActionButtons(allFOs, studentDataCache) {
     const selectedCheckboxes = document.querySelectorAll('.sancao-checkbox:checked');
 
     if (selectedCheckboxes.length === 0) {
-      alert('Selecione pelo menos uma sanção.');
+      showToast('Selecione pelo menos uma sanção.', 'warning');
       return;
     }
 
@@ -402,7 +403,7 @@ export function setupActionButtons(allFOs, studentDataCache) {
     });
 
     if (emailsToSend.length === 0) {
-      alert('Nenhum dos selecionados possui e-mail cadastrado.');
+      showToast('Nenhum dos selecionados possui e-mail cadastrado.', 'warning');
       btn.disabled = false;
       btn.innerHTML = originalText;
       return;
@@ -471,7 +472,7 @@ export function setupActionButtons(allFOs, studentDataCache) {
       if (errorCount > 0) {
         resultMessage += `\n\n❌ ${errorCount} erro(s):\n${errors.join('\n')}`;
       }
-      alert(resultMessage);
+      showToast(resultMessage, errors.length > 0 ? 'warning' : 'success');
 
       if (successCount > 0) {
         closeModal('modal-sancao');
@@ -479,7 +480,7 @@ export function setupActionButtons(allFOs, studentDataCache) {
 
     } catch (error) {
       console.error('Erro ao enviar emails:', error);
-      alert(`❌ Erro: ${error.message}`);
+      showToast(`Erro: ${error.message}`, 'error');
     } finally {
       btn.disabled = false;
       btn.innerHTML = originalText;
@@ -496,11 +497,11 @@ export function setupActionButtons(allFOs, studentDataCache) {
   document.getElementById('btn-confirmar-positivo')?.addEventListener('click', () => {
     const selected = document.querySelectorAll('#positivo-list input[type="checkbox"]:checked');
     if (selected.length === 0) {
-      alert('Selecione pelo menos um FO positivo.');
+      showToast('Selecione pelo menos um FO positivo.', 'warning');
       return;
     }
 
-    alert(`${selected.length} FO(s) positivo(s) selecionado(s) para envio. Integração de e-mail será implementada.`);
+    showToast(`${selected.length} FO(s) positivo(s) selecionado(s). Integração de e-mail em desenvolvimento.`, 'info');
     closeModal('modal-positivo');
   });
 
@@ -514,7 +515,7 @@ export function setupActionButtons(allFOs, studentDataCache) {
   document.getElementById('btn-gerar-aptos-pdf')?.addEventListener('click', () => {
     const aptosData = getAptosData(allFOs, studentDataCache);
     if (Object.keys(aptosData).length === 0) {
-      alert('Nenhum aluno apto para julgamento.');
+      showToast('Nenhum aluno apto para julgamento.', 'warning');
       return;
     }
 

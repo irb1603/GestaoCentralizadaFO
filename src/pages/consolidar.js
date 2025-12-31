@@ -182,7 +182,7 @@ export async function renderConsolidarPage(container) {
 
                     } catch (error) {
                         console.error('Erro ao consolidar FO:', error);
-                        alert('Erro ao consolidar FO: ' + error.message);
+                        showToast('Erro ao consolidar FO: ' + error.message, 'error');
                         btn.disabled = false;
                         btn.innerHTML = `${icons.check} Consolidado`;
                     }

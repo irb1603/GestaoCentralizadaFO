@@ -48,15 +48,18 @@ export const USER_ACCOUNTS = {
     'Sgte3cia': { role: 'sergeant', company: '3cia', canEditAll: false, canViewAudit: false },
 
     // Auxiliar - acesso restrito apenas a Faltas Escolares e Processo Disciplinar
+    // SECURITY: Password must be set in Firebase, not hardcoded
     'donafatima': {
         role: 'auxiliar',
         company: '3cia',
         canEditAll: false,
         canViewAudit: false,
-        allowedPages: ['faltas-escolares', 'processo-disciplinar'],
-        defaultPassword: '3cia2025'
+        allowedPages: ['faltas-escolares', 'processo-disciplinar']
     },
 };
+
+// Session expiration time (30 minutes in milliseconds)
+const SESSION_EXPIRATION_MS = 30 * 60 * 1000;
 
 // Company names for display
 export const COMPANY_NAMES = {
@@ -152,15 +155,33 @@ export function logout() {
 }
 
 /**
- * Get current session
- * @returns {Object|null} - Current session or null
+ * Get current session with expiration check
+ * SECURITY: Sessions expire after 30 minutes of inactivity
+ * @returns {Object|null} - Current session or null if expired
  */
 export function getSession() {
     const sessionData = localStorage.getItem(SESSION_KEY);
     if (!sessionData) return null;
 
     try {
-        return JSON.parse(sessionData);
+        const session = JSON.parse(sessionData);
+
+        // SECURITY: Check session expiration
+        const lastActivity = session.lastActivity || session.loginTime;
+        if (lastActivity) {
+            const elapsed = Date.now() - new Date(lastActivity).getTime();
+            if (elapsed > SESSION_EXPIRATION_MS) {
+                console.warn('[Auth] Session expired after 30 minutes of inactivity');
+                localStorage.removeItem(SESSION_KEY);
+                return null;
+            }
+        }
+
+        // Update last activity time (extend session on activity)
+        session.lastActivity = new Date().toISOString();
+        localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+        return session;
     } catch {
         return null;
     }

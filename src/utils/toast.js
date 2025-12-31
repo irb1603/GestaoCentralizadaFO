@@ -1,15 +1,19 @@
 // Toast Notifications Utility
 // Gestão Centralizada FO - CMB
 
+import { escapeHtml } from './security.js';
+
 /**
  * Show a toast notification
+ * SECURITY: Message is escaped to prevent XSS
  * @param {string} message - Message to display
  * @param {string} type - Type: 'info', 'success', 'warning', 'error'
  */
 export function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast toast--${type}`;
-    toast.innerHTML = `<span>${message}</span>`;
+    // SECURITY: Escape HTML to prevent XSS
+    toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
 
     let container = document.querySelector('.toast-container');
     if (!container) {

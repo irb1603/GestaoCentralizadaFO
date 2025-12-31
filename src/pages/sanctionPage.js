@@ -126,7 +126,7 @@ export async function renderSanctionPage(container, status, title, nextStatus, a
         const phone = fo.telefoneResponsavel || studentData.telefoneResponsavel || '';
 
         if (!phone) {
-          alert('Telefone do responsável não cadastrado.');
+          showToast('Telefone do responsável não cadastrado.', 'warning');
           return;
         }
 
@@ -178,7 +178,7 @@ export async function renderSanctionPage(container, status, title, nextStatus, a
 
         } catch (error) {
           console.error('Erro ao mover FO:', error);
-          alert('Erro ao mover FO: ' + error.message);
+          showToast('Erro ao mover FO: ' + error.message, 'error');
           btn.disabled = false;
           btn.innerHTML = `${icons.arrowRight} ${actionButtonText}`;
         }
