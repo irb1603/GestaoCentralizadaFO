@@ -4,7 +4,13 @@
  */
 
 import { getFatosObservados, getStudents } from '../firebase/database.js';
-import { getSession } from '../firebase/auth.js';
+import { getSession, getCompanyFilter } from '../firebase/auth.js';
+import {
+  getCachedFOList,
+  getCachedStudentList,
+  cacheFOList,
+  cacheStudentList
+} from '../services/cacheService.js';
 import {
   FO_STATUS,
   TIPO_FATO,
@@ -82,20 +88,41 @@ function renderFilters(session) {
 
 /**
  * Load and Process Data
+ * OPTIMIZED: Uses cache to reduce Firebase reads on page refresh
  */
 async function loadData() {
   try {
     const session = getSession();
     const isAdmin = [USER_ROLES.ADMIN, USER_ROLES.COMANDO_CA].includes(session?.role);
 
-    // Fetch data
-    const [fos, students] = await Promise.all([
-      getFatosObservados({ limit: 1000 }), // Get reasonably large dataset
-      getStudents()
-    ]);
+    // Get company filter for cache key
+    const companyFilter = getCompanyFilter();
+    const cacheKey = companyFilter || 'all';
 
-    allFOs = fos;
-    allStudents = students;
+    // 1. Try to get data from cache first
+    let cachedFOs = getCachedFOList(cacheKey, 'stats');
+    let cachedStudents = getCachedStudentList(cacheKey);
+
+    if (cachedFOs && cachedStudents) {
+      // Cache hit - use cached data (0 Firebase reads)
+      allFOs = cachedFOs;
+      allStudents = cachedStudents;
+      console.log('[Estatísticas] Dados carregados do cache');
+    } else {
+      // Cache miss - fetch from Firebase
+      const [fos, students] = await Promise.all([
+        getFatosObservados({ limit: 1000 }),
+        getStudents()
+      ]);
+
+      allFOs = fos;
+      allStudents = students;
+
+      // 2. Save to cache for future requests (5 min TTL for FOs, 10 min for students)
+      cacheFOList(fos, cacheKey, 'stats');
+      cacheStudentList(students, cacheKey);
+      console.log('[Estatísticas] Dados carregados do Firebase e armazenados no cache');
+    }
 
     // Apply initial filter for commanders
     if (!isAdmin && session.company) {
