@@ -12,12 +12,18 @@ let isLoading = false;
 /**
  * Initialize AI Chat component
  * Adds the floating button and chat container to the page
+ * Only available for Admin and ComandoCA roles
  */
 export function initAIChat() {
     const session = getSession();
 
     // Only show for logged in users
     if (!session) {
+        return;
+    }
+
+    // Restrict AI Chat to Admin and ComandoCA only
+    if (session.role !== 'admin' && session.role !== 'comandoCA') {
         return;
     }
 

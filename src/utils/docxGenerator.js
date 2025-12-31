@@ -26,6 +26,22 @@ function getCompanyNameFromTurma(turma) {
 }
 
 /**
+ * Convert full name to initials
+ * "João Pedro Silva" → "J.P.S."
+ */
+function getInitials(fullName) {
+    if (!fullName || fullName === '-') return '-';
+
+    const parts = fullName.trim().split(/\s+/);
+    const initials = parts
+        .filter(part => part.length > 0)
+        .map(part => part.charAt(0).toUpperCase())
+        .join('.');
+
+    return initials ? initials + '.' : '-';
+}
+
+/**
  * Format enquadramento for display
  */
 function formatEnquadramento(enquadramento) {
@@ -145,6 +161,7 @@ function generateRepreensaoSection(fos) {
     fos.forEach((fo) => {
         const studentNumber = fo.studentNumbers?.[0] || '-';
         const studentName = fo.studentInfo?.[0]?.nome || '-';
+        const studentInitials = getInitials(studentName);
         const studentTurma = fo.studentInfo?.[0]?.turma || '-';
         const companyName = getCompanyNameFromTurma(studentTurma);
 
@@ -158,16 +175,16 @@ function generateRepreensaoSection(fos) {
             ? 'sem agravantes da letra "g"'
             : `com as agravantes nº ${agravantes} da letra "g"`;
 
-        // Determine atenuantes text  
+        // Determine atenuantes text
         const atenuantesText = atenuantes === 'sem'
             ? 'sem atenuantes da letra "f"'
-            : `atenuantes nº ${atenuantes} da letra "f"`;
+            : `com as atenuantes nº ${atenuantes} da letra "f"`;
 
-        // Main paragraph
+        // Main paragraph - usando iniciais do nome
         elements.push(
             new Paragraph({
                 children: [
-                    new TextRun({ text: `Ao Aluno(a) ${studentNumber}, ${studentName}, da turma ${studentTurma}, da ${companyName}. ${descricao}. Conforme o número ${enquadramento}, do apêndice 1 do anexo "F" do RICM, ${agravantesText} e ${atenuantesText}, tudo do item 4 do anexo "F"(NRRD), falta disciplinar considerada ` }),
+                    new TextRun({ text: `Ao Aluno(a) ${studentNumber}, ${studentInitials}, da turma ${studentTurma}, da ${companyName}. ${descricao}. Conforme o número ${enquadramento}, do apêndice 1 do anexo "F" do RICM, ${agravantesText} e ${atenuantesText}, tudo do item 4 do anexo "F"(NRRD), falta disciplinar considerada ` }),
                     new TextRun({ text: 'MÉDIA', bold: true }),
                     new TextRun({ text: '. O aluno cumprirá a medida disciplinar de Repreensão.' })
                 ],
@@ -175,7 +192,7 @@ function generateRepreensaoSection(fos) {
             })
         );
 
-        // Cumprimento section
+        // Cumprimento section - usando iniciais do nome
         elements.push(
             new Paragraph({
                 children: [
@@ -185,7 +202,7 @@ function generateRepreensaoSection(fos) {
             }),
             new Paragraph({
                 children: [
-                    new TextRun({ text: `O cumprimento da Medida Disciplinar aplicada ao(a) Al ${studentName}, da turma ${studentTurma}, da ${companyName}, será de Repreensão, tendo em vista o caráter educacional da medida.` })
+                    new TextRun({ text: `O cumprimento da Medida Disciplinar aplicada ao(a) Al ${studentInitials}, da turma ${studentTurma}, da ${companyName}, será de Repreensão, tendo em vista o caráter educacional da medida.` })
                 ],
                 spacing: { after: 300 }
             })
@@ -215,6 +232,7 @@ function generateAOESection(fos) {
     fos.forEach((fo) => {
         const studentNumber = fo.studentNumbers?.[0] || '-';
         const studentName = fo.studentInfo?.[0]?.nome || '-';
+        const studentInitials = getInitials(studentName);
         const studentTurma = fo.studentInfo?.[0]?.turma || '-';
         const companyName = getCompanyNameFromTurma(studentTurma);
 
@@ -230,16 +248,16 @@ function generateAOESection(fos) {
             ? 'sem agravantes da letra "g"'
             : `com as agravantes nº ${agravantes} da letra "g"`;
 
-        // Determine atenuantes text  
+        // Determine atenuantes text
         const atenuantesText = atenuantes === 'sem'
             ? 'sem atenuantes da letra "f"'
-            : `atenuantes nº ${atenuantes} da letra "f"`;
+            : `com as atenuantes nº ${atenuantes} da letra "f"`;
 
-        // Main paragraph
+        // Main paragraph - usando iniciais do nome
         elements.push(
             new Paragraph({
                 children: [
-                    new TextRun({ text: `Ao Aluno(a) ${studentNumber}, ${studentName}, da turma ${studentTurma}, da ${companyName}. Por ter ${descricao}. Conforme o número ${enquadramento}, do apêndice 1 do anexo "F" do RICM, ${agravantesText} e ${atenuantesText}, tudo do item 4 do anexo "F"(NRRD), falta disciplinar considerada ` }),
+                    new TextRun({ text: `Ao Aluno(a) ${studentNumber}, ${studentInitials}, da turma ${studentTurma}, da ${companyName}. Por ter ${descricao}. Conforme o número ${enquadramento}, do apêndice 1 do anexo "F" do RICM, ${agravantesText} e ${atenuantesText}, tudo do item 4 do anexo "F"(NRRD), falta disciplinar considerada ` }),
                     new TextRun({ text: 'MÉDIA', bold: true }),
                     new TextRun({ text: `. O aluno cumprirá a medida disciplinar de ${diasText} de Atividade de Orientação Educacional.` })
                 ],
@@ -247,7 +265,7 @@ function generateAOESection(fos) {
             })
         );
 
-        // Cumprimento section
+        // Cumprimento section - usando iniciais do nome
         elements.push(
             new Paragraph({
                 children: [
@@ -257,7 +275,7 @@ function generateAOESection(fos) {
             }),
             new Paragraph({
                 children: [
-                    new TextRun({ text: `O cumprimento da Medida Disciplinar aplicada ao(a) Al ${studentName}, da turma ${studentTurma}, da ${companyName}, será de Atividade de Orientação Educacional, tendo em vista o caráter educacional da medida.` })
+                    new TextRun({ text: `O cumprimento da Medida Disciplinar aplicada ao(a) Al ${studentInitials}, da turma ${studentTurma}, da ${companyName}, será de Atividade de Orientação Educacional, tendo em vista o caráter educacional da medida.` })
                 ],
                 spacing: { after: 300 }
             })
@@ -287,6 +305,7 @@ function generateRetiradaSection(fos) {
     fos.forEach((fo) => {
         const studentNumber = fo.studentNumbers?.[0] || '-';
         const studentName = fo.studentInfo?.[0]?.nome || '-';
+        const studentInitials = getInitials(studentName);
         const studentTurma = fo.studentInfo?.[0]?.turma || '-';
         const companyName = getCompanyNameFromTurma(studentTurma);
 
@@ -302,16 +321,16 @@ function generateRetiradaSection(fos) {
             ? 'sem agravantes da letra "g"'
             : `com as agravantes nº ${agravantes} da letra "g"`;
 
-        // Determine atenuantes text  
+        // Determine atenuantes text
         const atenuantesText = atenuantes === 'sem'
             ? 'sem atenuantes da letra "f"'
-            : `atenuantes nº ${atenuantes} da letra "f"`;
+            : `com as atenuantes nº ${atenuantes} da letra "f"`;
 
-        // Main paragraph - Note: GRAVE instead of MÉDIA, and Retirada instead of AOE
+        // Main paragraph - usando iniciais do nome, GRAVE instead of MÉDIA, and Retirada instead of AOE
         elements.push(
             new Paragraph({
                 children: [
-                    new TextRun({ text: `Ao Aluno(a) ${studentNumber}, ${studentName}, da turma ${studentTurma}, da ${companyName}. Por ter ${descricao}. Conforme o número ${enquadramento}, do apêndice 1 do anexo "F" do RICM, ${agravantesText} e ${atenuantesText}, tudo do item 4 do anexo "F"(NRRD), falta disciplinar considerada ` }),
+                    new TextRun({ text: `Ao Aluno(a) ${studentNumber}, ${studentInitials}, da turma ${studentTurma}, da ${companyName}. Por ter ${descricao}. Conforme o número ${enquadramento}, do apêndice 1 do anexo "F" do RICM, ${agravantesText} e ${atenuantesText}, tudo do item 4 do anexo "F"(NRRD), falta disciplinar considerada ` }),
                     new TextRun({ text: 'GRAVE', bold: true }),
                     new TextRun({ text: `. O aluno cumprirá a medida disciplinar de ${diasText} de Retirada.` })
                 ],
@@ -319,7 +338,7 @@ function generateRetiradaSection(fos) {
             })
         );
 
-        // Cumprimento section
+        // Cumprimento section - usando iniciais do nome
         elements.push(
             new Paragraph({
                 children: [
@@ -329,7 +348,7 @@ function generateRetiradaSection(fos) {
             }),
             new Paragraph({
                 children: [
-                    new TextRun({ text: `O cumprimento da Medida Disciplinar aplicada ao(a) Al ${studentName}, da turma ${studentTurma}, da ${companyName}, será de Retirada, tendo em vista o caráter educacional da medida.` })
+                    new TextRun({ text: `O cumprimento da Medida Disciplinar aplicada ao(a) Al ${studentInitials}, da turma ${studentTurma}, da ${companyName}, será de Retirada, tendo em vista o caráter educacional da medida.` })
                 ],
                 spacing: { after: 300 }
             })

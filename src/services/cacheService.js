@@ -13,13 +13,14 @@
  */
 
 // Default TTL values (in milliseconds)
+// OPTIMIZED: Increased TTLs to reduce Firebase reads
 const TTL = {
-    STUDENTS: 10 * 60 * 1000,        // 10 minutes for student data
-    STUDENTS_LIST: 5 * 60 * 1000,    // 5 minutes for student lists
-    FOS: 2 * 60 * 1000,              // 2 minutes for FOs (changes more frequently)
+    STUDENTS: 15 * 60 * 1000,        // 15 minutes for student data (increased)
+    STUDENTS_LIST: 10 * 60 * 1000,   // 10 minutes for student lists (increased)
+    FOS: 5 * 60 * 1000,              // 5 minutes for FOs (increased from 2)
     AUTH: 60 * 60 * 1000,            // 1 hour for auth credentials
-    STATS: 5 * 60 * 1000,            // 5 minutes for statistics
-    AUDIT: 1 * 60 * 1000,            // 1 minute for audit logs
+    STATS: 10 * 60 * 1000,           // 10 minutes for statistics (increased)
+    AUDIT: 2 * 60 * 1000,            // 2 minutes for audit logs (increased)
 };
 
 // Cache storage

@@ -288,8 +288,8 @@ async function getAllFOs(companyFilter) {
     const snapshot = await getDocs(q);
     const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    // Cache for 2 minutes (base data for many analyses)
-    cacheAIData(cacheKey, fos, company, CACHE_TTL.FOS);
+    // Cache for 5 minutes (base data for many analyses - extended for fewer reads)
+    cacheAIData(cacheKey, fos, company, CACHE_TTL.STATS);
 
     return fos;
 }
@@ -722,6 +722,7 @@ async function getPreventiveAlerts(companyFilter) {
 
 /**
  * Get FO statistics (with cache)
+ * OPTIMIZED: Uses getAllFOs() instead of separate query
  */
 async function getFOStats(companyFilter, startOfWeek, startOfMonth) {
     const cacheKey = 'foStats';
@@ -736,15 +737,8 @@ async function getFOStats(companyFilter, startOfWeek, startOfMonth) {
 
     console.log('[AI Cache] Fetching fresh FO stats for', company);
 
-    // Fetch from Firebase
-    let q = query(collection(db, 'fatosObservados'));
-
-    if (companyFilter) {
-        q = query(q, where('company', '==', companyFilter));
-    }
-
-    const snapshot = await getDocs(q);
-    const fos = snapshot.docs.map(doc => doc.data());
+    // OPTIMIZED: Use cached getAllFOs instead of separate query
+    const fos = await getAllFOs(companyFilter);
 
     const today = new Date().toISOString().split('T')[0];
     const weekStart = startOfWeek.toISOString().split('T')[0];
@@ -779,6 +773,7 @@ async function getFOStats(companyFilter, startOfWeek, startOfMonth) {
 
 /**
  * Get observer ranking (with cache)
+ * OPTIMIZED: Uses getAllFOs() instead of separate query
  */
 async function getObserverRanking(companyFilter, startOfMonth) {
     const cacheKey = 'observerRanking';
@@ -793,14 +788,8 @@ async function getObserverRanking(companyFilter, startOfMonth) {
 
     console.log('[AI Cache] Fetching fresh observer ranking for', company);
 
-    let q = query(collection(db, 'fatosObservados'));
-
-    if (companyFilter) {
-        q = query(q, where('company', '==', companyFilter));
-    }
-
-    const snapshot = await getDocs(q);
-    const fos = snapshot.docs.map(doc => doc.data());
+    // OPTIMIZED: Use cached getAllFOs instead of separate query
+    const fos = await getAllFOs(companyFilter);
     const monthStart = startOfMonth.toISOString().split('T')[0];
 
     const observerCounts = {};
@@ -933,6 +922,7 @@ async function getFaltasStats(companyFilter) {
 
 /**
  * Get students in AOE/Retirada (with cache)
+ * OPTIMIZED: Uses getAllFOs() instead of separate query
  */
 async function getSancoesCumprimento(companyFilter) {
     const cacheKey = 'sancoesCumprimento';
@@ -949,14 +939,8 @@ async function getSancoesCumprimento(companyFilter) {
 
     const today = new Date().toISOString().split('T')[0];
 
-    let q = query(collection(db, 'fatosObservados'));
-
-    const snapshot = await getDocs(q);
-    let fos = snapshot.docs.map(doc => doc.data());
-
-    if (companyFilter) {
-        fos = fos.filter(fo => fo.company === companyFilter);
-    }
+    // OPTIMIZED: Use cached getAllFOs instead of separate query
+    const fos = await getAllFOs(companyFilter);
 
     // Filter by those with datasCumprimento containing today
     const aoe = fos.filter(fo =>
@@ -987,6 +971,7 @@ async function getSancoesCumprimento(companyFilter) {
 
 /**
  * Get sanções statistics (with cache)
+ * OPTIMIZED: Uses getAllFOs() instead of separate query
  */
 async function getSancoesStats(companyFilter, startOfMonth) {
     const cacheKey = 'sancoesStats';
@@ -1001,14 +986,8 @@ async function getSancoesStats(companyFilter, startOfMonth) {
 
     console.log('[AI Cache] Fetching fresh sanções stats for', company);
 
-    let q = query(collection(db, 'fatosObservados'));
-
-    if (companyFilter) {
-        q = query(q, where('company', '==', companyFilter));
-    }
-
-    const snapshot = await getDocs(q);
-    const fos = snapshot.docs.map(doc => doc.data());
+    // OPTIMIZED: Use cached getAllFOs instead of separate query
+    const fos = await getAllFOs(companyFilter);
     const monthStart = startOfMonth.toISOString().split('T')[0];
 
     const monthFOs = fos.filter(fo => (fo.dataRegistro || fo.dataFato) >= monthStart);

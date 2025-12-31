@@ -46,16 +46,21 @@ export async function renderComportamentoPage() {
             ${companyFilter ? COMPANY_NAMES[companyFilter] || companyFilter : 'Todas as Companhias'}
           </p>
         </div>
-        <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
-          <input type="file" id="csv-import-input" accept=".csv" style="display: none;">
-          <button class="btn btn--secondary" id="import-csv-btn">
-            ${icons.upload}
-            <span>Importar CSV</span>
-          </button>
-          <button class="btn btn--primary" id="save-all-btn">
-            ${icons.check}
-            <span>Salvar Todas Notas</span>
-          </button>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2);">
+          <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+            <input type="file" id="csv-import-input" accept=".csv" style="display: none;">
+            <button class="btn btn--secondary" id="import-csv-btn">
+              ${icons.upload}
+              <span>Importar CSV</span>
+            </button>
+            <button class="btn btn--primary" id="save-all-btn">
+              ${icons.check}
+              <span>Salvar Todas Notas</span>
+            </button>
+          </div>
+          <div style="font-size: var(--font-size-xs); color: var(--text-tertiary); font-family: monospace;">
+            Formato CSV: numero,nome,turma,comportamento
+          </div>
         </div>
       </div>
     </div>

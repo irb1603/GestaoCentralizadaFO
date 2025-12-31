@@ -201,12 +201,12 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false, o
           <div class="expandable-card__section-header">
             <h4 class="expandable-card__section-title" style="margin-bottom: 0;">Enquadramento (Faltas Disciplinares)</h4>
             ${!readOnly ? `
-              <button type="button" class="btn btn--ghost btn--sm ai-suggest-btn" 
-                      data-action="ai-suggest" 
+              <button type="button" class="btn btn--ghost btn--sm ai-suggest-btn"
+                      data-action="ai-suggest"
                       data-card-id="${cardId}"
                       data-description="${(fo.descricao || '').replace(/"/g, '&quot;')}"
-                      title="Sugestão de IA para Enquadramento, Atenuantes e Agravantes">
-                ${icons.bot || '🤖'} Sugerir
+                      title="Sugestão automática de Enquadramento, Atenuantes e Agravantes baseada na descrição">
+                📋 Sugerir Enquadramento
               </button>
             ` : ''}
           </div>
@@ -617,7 +617,9 @@ function renderDatasCumprimentoInternal(datasArray, numDias, enabled) {
 }
 
 /**
- * Setup AI Suggestion buttons
+ * Setup RICM Suggestion buttons (local analysis, no AI dependency)
+ * OTIMIZADO: Não busca contexto do aluno por padrão (0 leituras do Firebase)
+ * Usuário pode clicar em "Buscar Histórico" para obter atenuantes/agravantes baseados no aluno
  */
 export function setupAISuggestion() {
   document.querySelectorAll('.ai-suggest-btn').forEach(btn => {
@@ -632,33 +634,22 @@ export function setupAISuggestion() {
 
       if (!resultContainer || !contentDiv) return;
 
+      // Get student number from the card (for optional context fetch)
+      const card = document.getElementById(cardId);
+      const studentNumber = document.querySelector(`#${cardId} .expandable-card__number`)?.textContent?.trim() || null;
+
       // Show loading
       resultContainer.classList.remove('hidden');
       contentDiv.innerHTML = `
         <div class="ai-suggestion-loading">
           <span class="spinner"></span>
-          <span>Analisando descrição com IA...</span>
+          <span>Analisando descrição...</span>
         </div>
       `;
 
       btn.disabled = true;
 
       try {
-        // Dynamically import AI service
-        const { chatWithAI, isAIConfigured } = await import('../services/aiService.js');
-
-        // Check if AI is configured
-        const configured = await isAIConfigured();
-        if (!configured) {
-          contentDiv.innerHTML = `
-            <p style="color: var(--color-warning-700);">
-              ⚠️ O assistente de IA não está configurado. 
-              Solicite ao administrador que configure a API key do Gemini na página Admin.
-            </p>
-          `;
-          return;
-        }
-
         if (!description || description.trim() === '') {
           contentDiv.innerHTML = `
             <p style="color: var(--color-warning-700);">
@@ -668,24 +659,18 @@ export function setupAISuggestion() {
           return;
         }
 
-        // Create specific prompt for enquadramento suggestion
-        const prompt = `Com base na seguinte descrição de um fato observado, sugira:
-1. O número do enquadramento (falta disciplinar) mais adequado do RICM
-2. Possíveis agravantes aplicáveis
-3. Possíveis atenuantes aplicáveis
-4. Classificação provável da falta (leve/média/grave)
+        // Dynamically import local RICM suggestion service
+        const { getSuggestion, formatSuggestionHTML } = await import('../services/ricmSuggestionService.js');
 
-Descrição do fato: "${description}"
+        // Get suggestion WITHOUT student context (0 Firebase reads)
+        // This analyzes only the description text
+        const suggestion = await getSuggestion(description, studentNumber, false);
 
-Responda de forma concisa e direta, citando os números dos artigos.`;
-
-        const response = await chatWithAI(prompt);
-
-        // Format and display response
-        contentDiv.innerHTML = formatAISuggestionResponse(response);
+        // Format and display response with option to fetch student context
+        contentDiv.innerHTML = formatSuggestionHTML(suggestion, studentNumber);
 
       } catch (error) {
-        console.error('AI Suggestion Error:', error);
+        console.error('RICM Suggestion Error:', error);
         contentDiv.innerHTML = `
           <p style="color: var(--color-danger-700);">
             ❌ Erro ao obter sugestão: ${error.message}
@@ -696,27 +681,42 @@ Responda de forma concisa e direta, citando os números dos artigos.`;
       }
     });
   });
-}
 
-/**
- * Format AI response for display
- */
-function formatAISuggestionResponse(text) {
-  // Basic formatting
-  let formatted = text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-    .replace(/^\d+\.\s/gm, '<br><strong>•</strong> ');
+  // Setup fetch student context buttons (delegated event)
+  document.addEventListener('click', async (e) => {
+    const fetchBtn = e.target.closest('.fetch-student-context-btn');
+    if (!fetchBtn) return;
 
-  return `
-    <div style="margin-bottom: var(--space-2);">
-      <strong style="color: var(--color-primary-700);">🤖 Sugestão da IA:</strong>
-    </div>
-    <div>${formatted}</div>
-    <div style="margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--text-tertiary);">
-      <em>Esta é apenas uma sugestão. Confirme os artigos no RICM.</em>
-    </div>
-  `;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const studentNumber = fetchBtn.dataset.studentNumber;
+    const description = fetchBtn.dataset.description;
+
+    // Get cardId from parent container
+    const resultContainer = fetchBtn.closest('.ai-suggestion-result');
+    const contentDiv = resultContainer?.querySelector('.ai-suggestion-content');
+
+    if (!contentDiv || !studentNumber) return;
+
+    fetchBtn.disabled = true;
+    fetchBtn.innerHTML = '<span class="spinner spinner--sm"></span> Buscando histórico...';
+
+    try {
+      const { getSuggestion, formatSuggestionHTML } = await import('../services/ricmSuggestionService.js');
+
+      // Now fetch WITH student context (this makes Firebase reads)
+      const suggestion = await getSuggestion(description, studentNumber, true);
+
+      // Update display with full context (null = don't show fetch button again)
+      contentDiv.innerHTML = formatSuggestionHTML(suggestion, null);
+
+    } catch (error) {
+      console.error('RICM Context Fetch Error:', error);
+      fetchBtn.disabled = false;
+      fetchBtn.innerHTML = '❌ Erro ao buscar';
+    }
+  });
 }
 
 /**
@@ -1096,5 +1096,174 @@ export const expandableCardStyles = `
 
 .autocomplete-tag__remove:hover {
   color: var(--color-danger-500);
+}
+
+/* RICM Suggestion Styles */
+.suggestion-section {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.suggestion-section--student {
+  background: linear-gradient(135deg, var(--color-primary-50), var(--bg-primary));
+  border-color: var(--color-primary-200);
+}
+
+.suggestion-section--faltas {
+  background: var(--bg-primary);
+}
+
+.suggestion-section--atenuantes {
+  background: linear-gradient(135deg, var(--color-success-50), var(--bg-primary));
+  border-color: var(--color-success-200);
+}
+
+.suggestion-section--agravantes {
+  background: linear-gradient(135deg, var(--color-danger-50), var(--bg-primary));
+  border-color: var(--color-danger-200);
+}
+
+.suggestion-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.suggestion-section-header strong {
+  font-size: var(--font-size-sm);
+}
+
+.suggestion-section-content p {
+  margin: var(--space-1) 0;
+  font-size: var(--font-size-sm);
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.suggestion-item--primary {
+  background: var(--color-primary-50);
+  border: 1px solid var(--color-primary-200);
+}
+
+.suggestion-item-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  background: var(--color-primary-100);
+  color: var(--color-primary-700);
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.suggestion-item-number--success {
+  background: var(--color-success-100);
+  color: var(--color-success-700);
+}
+
+.suggestion-item-number--danger {
+  background: var(--color-danger-100);
+  color: var(--color-danger-700);
+}
+
+.suggestion-item-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.suggestion-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.suggestion-item-reason {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.suggestion-empty {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-3);
+}
+
+.suggestion-footer {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-light);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.badge--sm {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+}
+
+/* Close button for suggestions */
+.suggestion-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.suggestion-close-btn:hover {
+  background: var(--color-danger-100);
+  color: var(--color-danger-600);
+}
+
+.ai-suggestion-result {
+  position: relative;
+}
+
+/* Fetch student context button section */
+.suggestion-fetch-context {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: linear-gradient(135deg, var(--color-primary-50), var(--bg-primary));
+  border: 1px dashed var(--color-primary-300);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.suggestion-fetch-context .btn {
+  margin-top: var(--space-2);
 }
 `;
