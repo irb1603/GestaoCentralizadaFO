@@ -24,7 +24,15 @@ import { renderExpandableCard, expandableCardStyles, setupAutocomplete, setupQua
 import { renderActionModals, actionButtonsStyles, setupActionButtons } from '../components/actionModals.js';
 import { icons } from '../utils/icons.js';
 import { logAction } from '../services/auditLogger.js';
-import { invalidateAICache, invalidateFOCache } from '../services/cacheService.js';
+import {
+  invalidateAICache,
+  invalidateFOCache,
+  getCachedFOList,
+  cacheFOList,
+  getCachedStudent,
+  cacheStudent,
+  CACHE_TTL
+} from '../services/cacheService.js';
 
 let allFOs = [];
 let studentDataCache = {};
@@ -146,28 +154,41 @@ export async function renderInicialPage() {
   await loadPendingFOs();
 }
 
-async function loadPendingFOs(searchTerm = '', tipoFilter = '') {
+async function loadPendingFOs(searchTerm = '', tipoFilter = '', forceRefresh = false) {
   const container = document.getElementById('fo-cards-container');
   const companyFilter = getCompanyFilter();
+  const cacheKey = companyFilter || 'all';
 
   try {
-    // Build query for pending FOs
-    let q;
-    if (companyFilter) {
-      q = query(
-        collection(db, 'fatosObservados'),
-        where('status', '==', FO_STATUS.PENDENTE),
-        where('company', '==', companyFilter)
-      );
-    } else {
-      q = query(
-        collection(db, 'fatosObservados'),
-        where('status', '==', FO_STATUS.PENDENTE)
-      );
-    }
+    // OPTIMIZATION: Try cache first (reduces Firebase reads significantly)
+    let cachedFOs = !forceRefresh ? getCachedFOList(cacheKey, FO_STATUS.PENDENTE) : null;
 
-    const snapshot = await getDocs(q);
-    allFOs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    if (cachedFOs) {
+      console.log('[Cache] Using cached pending FOs:', cachedFOs.length);
+      allFOs = cachedFOs;
+    } else {
+      // Build query for pending FOs
+      let q;
+      if (companyFilter) {
+        q = query(
+          collection(db, 'fatosObservados'),
+          where('status', '==', FO_STATUS.PENDENTE),
+          where('company', '==', companyFilter)
+        );
+      } else {
+        q = query(
+          collection(db, 'fatosObservados'),
+          where('status', '==', FO_STATUS.PENDENTE)
+        );
+      }
+
+      const snapshot = await getDocs(q);
+      allFOs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Cache the results (5 min TTL for pending FOs - more dynamic)
+      cacheFOList(allFOs, cacheKey, FO_STATUS.PENDENTE);
+      console.log('[Cache] Cached pending FOs:', allFOs.length);
+    }
 
     // Sort by date (newest first)
     allFOs.sort((a, b) => {
@@ -215,16 +236,26 @@ async function loadPendingFOs(searchTerm = '', tipoFilter = '') {
       return;
     }
 
-    // Load student data for each FO
+    // OPTIMIZATION: Load student data with caching
     for (const fo of filteredFOs) {
-      if (fo.studentNumbers?.[0] && !studentDataCache[fo.studentNumbers[0]]) {
-        try {
-          const studentDoc = await getDoc(doc(db, 'students', String(fo.studentNumbers[0])));
-          if (studentDoc.exists()) {
-            studentDataCache[fo.studentNumbers[0]] = studentDoc.data();
+      const studentNum = fo.studentNumbers?.[0];
+      if (studentNum && !studentDataCache[studentNum]) {
+        // Try global cache first
+        const cachedStudent = getCachedStudent(studentNum);
+        if (cachedStudent) {
+          studentDataCache[studentNum] = cachedStudent;
+        } else {
+          try {
+            const studentDoc = await getDoc(doc(db, 'students', String(studentNum)));
+            if (studentDoc.exists()) {
+              const studentData = studentDoc.data();
+              studentDataCache[studentNum] = studentData;
+              // Cache for future use
+              cacheStudent({ ...studentData, numero: studentNum });
+            }
+          } catch (err) {
+            console.warn('Could not load student data:', err);
           }
-        } catch (err) {
-          console.warn('Could not load student data:', err);
         }
       }
     }
@@ -445,10 +476,10 @@ async function saveCardChanges(foId, card) {
     showToast('Alterações salvas com sucesso', 'success');
     card.classList.remove('expanded');
 
-    // Refresh the list
+    // Refresh the list (force refresh to get latest from Firebase)
     const searchInput = document.getElementById('search-fo');
     const tipoFilter = document.getElementById('filter-tipo');
-    await loadPendingFOs(searchInput?.value || '', tipoFilter?.value || '');
+    await loadPendingFOs(searchInput?.value || '', tipoFilter?.value || '', true);
 
   } catch (error) {
     console.error('Error saving:', error);
@@ -482,10 +513,10 @@ async function transferFO(foId, newStatus) {
 
     showToast('FO transferido com sucesso', 'success');
 
-    // Refresh the list
+    // Refresh the list (force refresh after mutation)
     const searchInput = document.getElementById('search-fo');
     const tipoFilter = document.getElementById('filter-tipo');
-    await loadPendingFOs(searchInput?.value || '', tipoFilter?.value || '');
+    await loadPendingFOs(searchInput?.value || '', tipoFilter?.value || '', true);
 
   } catch (error) {
     console.error('Error transferring:', error);
@@ -519,10 +550,10 @@ async function deleteFO(foId) {
 
     showToast('FO movido para GLPI', 'success');
 
-    // Refresh the list
+    // Refresh the list (force refresh after mutation)
     const searchInput = document.getElementById('search-fo');
     const tipoFilter = document.getElementById('filter-tipo');
-    await loadPendingFOs(searchInput?.value || '', tipoFilter?.value || '');
+    await loadPendingFOs(searchInput?.value || '', tipoFilter?.value || '', true);
 
   } catch (error) {
     console.error('Error deleting:', error);

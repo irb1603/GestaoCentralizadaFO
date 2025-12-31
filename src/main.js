@@ -1,18 +1,20 @@
 // Main Application Entry Point
 // Gestão Centralizada FO - CMB
 
-import { isAuthenticated, getSession } from './firebase/auth.js';
+import { isAuthenticated, getSession, getCompanyFilter } from './firebase/auth.js';
 import { renderLoginPage } from './pages/login.js';
 import { renderSidebar, setupSidebarEvents } from './components/sidebar.js';
 import { renderHeader, setupHeaderEvents } from './components/header.js';
 import { initAIChat, destroyAIChat } from './components/aiChat.js';
 import { ROUTES, PAGE_TITLES, FO_STATUS } from './constants/index.js';
+import { warmCache, resetCacheWarmedState, getCacheStats } from './services/cacheService.js';
 
 // Initialize application
 async function init() {
   // Check authentication
   if (!isAuthenticated()) {
     destroyAIChat(); // Remove AI chat if logging out
+    resetCacheWarmedState(); // Reset cache state on logout
     renderLoginPage();
     return;
   }
@@ -24,6 +26,11 @@ async function init() {
   // Render main layout
   renderMainLayout(currentPage);
 
+  // OPTIMIZATION: Warm cache in background while page loads
+  // This preloads common data to minimize Firebase reads
+  const companyFilter = getCompanyFilter();
+  warmCacheInBackground(companyFilter);
+
   // Load page content
   await loadPage(currentPage);
 
@@ -33,6 +40,31 @@ async function init() {
 
   // Initialize AI Chat (only for logged in users)
   initAIChat();
+
+  // Log cache stats for debugging
+  console.log('[App] Cache stats:', getCacheStats());
+}
+
+/**
+ * Warm cache in background without blocking page load
+ * @param {string|null} companyFilter - Company filter
+ */
+async function warmCacheInBackground(companyFilter) {
+  try {
+    // Import database functions lazily to avoid circular dependencies
+    const { getStudents, getFatosObservados } = await import('./firebase/database.js');
+
+    // Warm cache with fetchers for students and FOs
+    // getStudents() respects company filter automatically via getCompanyFilter()
+    // getFatosObservados() accepts filters object
+    await warmCache(
+      getStudents,
+      () => getFatosObservados({ limit: 500 }),
+      companyFilter
+    );
+  } catch (error) {
+    console.warn('[App] Cache warming failed:', error);
+  }
 }
 
 // Render main layout with sidebar and header

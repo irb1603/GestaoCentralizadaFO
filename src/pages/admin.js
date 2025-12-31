@@ -1348,9 +1348,10 @@ async function loadAIConfigs() {
                      value="${configs[company.id]?.apiKey || ''}"
                      style="font-family: monospace;">
               <select class="form-select ai-model" id="ai-model-${company.id}" data-company="${company.id}">
-                <option value="gemini-2.5-flash-lite" ${configs[company.id]?.model === 'gemini-2.5-flash-lite' || !configs[company.id]?.model ? 'selected' : ''}>2.5 Flash Lite (Recomendado)</option>
-                <option value="gemini-2.5-flash" ${configs[company.id]?.model === 'gemini-2.5-flash' ? 'selected' : ''}>2.5 Flash</option>
-                <option value="gemini-2.0-flash" ${configs[company.id]?.model === 'gemini-2.0-flash' ? 'selected' : ''}>2.0 Flash</option>
+                <option value="gemini-2.0-flash" ${configs[company.id]?.model === 'gemini-2.0-flash' || !configs[company.id]?.model ? 'selected' : ''}>2.0 Flash (1500/dia - Recomendado)</option>
+                <option value="gemini-2.5-flash-lite" ${configs[company.id]?.model === 'gemini-2.5-flash-lite' ? 'selected' : ''}>2.5 Flash Lite (1000/dia)</option>
+                <option value="gemini-2.5-flash" ${configs[company.id]?.model === 'gemini-2.5-flash' ? 'selected' : ''}>2.5 Flash (250/dia)</option>
+                <option value="gemini-2.5-pro" ${configs[company.id]?.model === 'gemini-2.5-pro' ? 'selected' : ''}>2.5 Pro (100/dia - Avançado)</option>
               </select>
               <span class="ai-config-status" id="ai-status-${company.id}">
                 ${configs[company.id]?.apiKey ? '✅' : '❌'}

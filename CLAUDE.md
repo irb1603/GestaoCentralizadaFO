@@ -67,16 +67,33 @@ Navigation flow:
 
 ### Cache Layer
 
-**Critical for performance** - `src/services/cacheService.js` implements a two-tier cache:
-- **Memory cache** (Map) for in-session data
+**Critical for performance** - `src/services/cacheService.js` implements a three-tier cache:
+- **Memory cache** (Map) for fastest in-session data
 - **sessionStorage** for persistence across page reloads
+- **localStorage** for persistent data across browser sessions
 
-Cache categories with different TTLs:
-- Students: 10 minutes (rarely change)
-- FOs: 2 minutes (change frequently)
-- Auth: 1 hour
-- Stats: 5 minutes
-- **AI Data: 2-5 minutes** (context-specific queries)
+#### Cache TTLs (Aggressively Optimized for Firebase Free Tier)
+
+| Category | TTL | Purpose |
+|----------|-----|---------|
+| Students | 30 min | Rarely changes |
+| Students List | 30 min | Student lists rarely change |
+| FOs | 10 min | Main FO data |
+| FOs Pending | 5 min | More dynamic, needs fresher data |
+| Auth | 2 hours | Authentication credentials |
+| Stats | 15 min | Dashboard statistics |
+| Audit | 5 min | Audit logs |
+| Global | 1 hour | Static/global data |
+
+#### Cache Warming (App Startup)
+
+On app initialization, `main.js` calls `warmCacheInBackground()` which:
+1. Preloads all students for the user's company
+2. Preloads recent FOs (limit 500)
+3. Runs in background without blocking page render
+4. Skips if data already cached
+
+This reduces subsequent page navigation to **0 Firebase reads** when data is cached.
 
 **Always use cache service** when fetching students or FOs to avoid excessive Firebase reads. Invalidate cache after mutations using `invalidateStudentCache()` or `invalidateFOCache()`.
 
@@ -84,15 +101,23 @@ Cache categories with different TTLs:
 
 The AI assistant (`src/services/aiService.js`) implements **aggressive caching** to reduce Firebase reads:
 
-**Cached queries:**
-- `getFOStats()` - FO statistics (today/week/month) - 2 min TTL
-- `getObserverRanking()` - Top 10 observers - 5 min TTL
-- `getAditamentoStats()` - Weekly aditamento stats - 5 min TTL
-- `getFaltasStats()` - School absences aggregated - 5 min TTL
-- `getSancoesCumprimento()` - Students in AOE/Retirada today - 2 min TTL
-- `getSancoesStats()` - Monthly sanction stats - 5 min TTL
-- `getComportamentoStats()` - Behavior decline analysis - 5 min TTL
-- `getPedagogicalFOs()` - Weekly learning-related FOs - 5 min TTL
+**Core optimization:** `getAllFOs()` fetches all FOs once and caches them. All other AI analyses reuse this cached data with client-side filtering, avoiding redundant Firebase queries.
+
+**Cached queries (all 15 min TTL):**
+- `getAllFOs()` - Base data for most analyses
+- `getFOStats()` - FO statistics (today/week/month)
+- `getObserverRanking()` - Top 10 observers
+- `getAditamentoStats()` - Weekly aditamento stats
+- `getFaltasStats()` - School absences aggregated
+- `getSancoesCumprimento()` - Students in AOE/Retirada today
+- `getSancoesStats()` - Monthly sanction stats
+- `getComportamentoStats()` - Behavior decline analysis
+- `getPedagogicalFOs()` - Weekly learning-related FOs
+- `getStudentHistory()` - Individual student FO history
+- `getRecurrenceAnalysis()` - Students with multiple FOs
+- `getPeriodComparison()` - Compare periods
+- `getAnalysisByTurma()` - FOs grouped by class
+- `getPreventiveAlerts()` - Risk scoring
 
 **Performance impact:**
 - **First query**: 1 config read + N document reads (where N = # of docs in collections)

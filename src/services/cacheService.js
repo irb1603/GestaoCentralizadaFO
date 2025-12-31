@@ -13,14 +13,17 @@
  */
 
 // Default TTL values (in milliseconds)
-// OPTIMIZED: Increased TTLs to reduce Firebase reads
+// AGGRESSIVE OPTIMIZATION: Significantly increased TTLs to minimize Firebase reads
+// Firebase free tier: 50,000 reads/day - these TTLs help stay under limit
 const TTL = {
-    STUDENTS: 15 * 60 * 1000,        // 15 minutes for student data (increased)
-    STUDENTS_LIST: 10 * 60 * 1000,   // 10 minutes for student lists (increased)
-    FOS: 5 * 60 * 1000,              // 5 minutes for FOs (increased from 2)
-    AUTH: 60 * 60 * 1000,            // 1 hour for auth credentials
-    STATS: 10 * 60 * 1000,           // 10 minutes for statistics (increased)
-    AUDIT: 2 * 60 * 1000,            // 2 minutes for audit logs (increased)
+    STUDENTS: 30 * 60 * 1000,        // 30 minutes for student data (rarely changes)
+    STUDENTS_LIST: 30 * 60 * 1000,   // 30 minutes for student lists (rarely changes)
+    FOS: 10 * 60 * 1000,             // 10 minutes for FOs (main data)
+    FOS_PENDING: 5 * 60 * 1000,      // 5 minutes for pending FOs (more dynamic)
+    AUTH: 2 * 60 * 60 * 1000,        // 2 hours for auth credentials
+    STATS: 15 * 60 * 1000,           // 15 minutes for statistics
+    AUDIT: 5 * 60 * 1000,            // 5 minutes for audit logs
+    GLOBAL: 60 * 60 * 1000,          // 1 hour for global/static data
 };
 
 // Cache storage
@@ -427,6 +430,238 @@ export function invalidateAICache(dataType = null) {
 }
 
 // ============================================
+// localStorage Persistence (for cross-session data)
+// ============================================
+
+const LOCAL_STORAGE_PREFIX = 'cmb_persistent_';
+
+/**
+ * Get item from localStorage with expiry check
+ * @param {string} key - Cache key
+ * @returns {any|null} - Cached value or null
+ */
+export function getFromPersistentCache(key) {
+    try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_PREFIX + key);
+        if (stored) {
+            const item = JSON.parse(stored);
+            if (Date.now() < item.expiry) {
+                // Also restore to memory cache for faster subsequent access
+                memoryCache.set(key, item);
+                return item.value;
+            }
+            // Expired, remove
+            localStorage.removeItem(LOCAL_STORAGE_PREFIX + key);
+        }
+    } catch (e) {
+        console.warn('Persistent cache read error:', e);
+    }
+    return null;
+}
+
+/**
+ * Set item in localStorage with TTL
+ * @param {string} key - Cache key
+ * @param {any} value - Value to cache
+ * @param {number} ttl - Time to live in milliseconds
+ */
+export function setInPersistentCache(key, value, ttl) {
+    const item = {
+        value,
+        expiry: Date.now() + ttl,
+        cached: Date.now()
+    };
+
+    // Also set in memory cache
+    memoryCache.set(key, item);
+
+    try {
+        localStorage.setItem(LOCAL_STORAGE_PREFIX + key, JSON.stringify(item));
+    } catch (e) {
+        console.warn('Persistent cache write error:', e);
+        // Try to clear old items
+        clearExpiredPersistentCache();
+    }
+}
+
+/**
+ * Clear expired items from localStorage
+ */
+export function clearExpiredPersistentCache() {
+    try {
+        const now = Date.now();
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) {
+                try {
+                    const item = JSON.parse(localStorage.getItem(key));
+                    if (now >= item.expiry) {
+                        localStorage.removeItem(key);
+                    }
+                } catch (e) {
+                    localStorage.removeItem(key);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Persistent cache cleanup error:', e);
+    }
+}
+
+/**
+ * Clear all persistent cache
+ */
+export function clearPersistentCache() {
+    try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) {
+                localStorage.removeItem(key);
+            }
+        }
+    } catch (e) {
+        console.warn('Persistent cache clear error:', e);
+    }
+}
+
+// ============================================
+// Global Cache Warming (Preload critical data)
+// ============================================
+
+let cacheWarmingPromise = null;
+let cacheWarmed = false;
+
+/**
+ * Preload critical data into cache on app start
+ * This reduces Firebase reads by loading common data once
+ * @param {Function} getStudentsFn - Function to get students
+ * @param {Function} getFOsFn - Function to get FOs
+ * @param {string} companyFilter - Company filter or null
+ */
+export async function warmCache(getStudentsFn, getFOsFn, companyFilter) {
+    // Prevent duplicate warming
+    if (cacheWarmingPromise) {
+        return cacheWarmingPromise;
+    }
+
+    if (cacheWarmed) {
+        console.log('[Cache] Already warmed, skipping');
+        return;
+    }
+
+    console.log('[Cache] Warming cache for company:', companyFilter || 'all');
+
+    cacheWarmingPromise = (async () => {
+        try {
+            const cacheKey = companyFilter || 'all';
+
+            // Check if we already have fresh data in cache
+            const cachedStudents = getCachedStudentList(cacheKey);
+            const cachedFOs = getCachedFOList(cacheKey, 'all');
+
+            const promises = [];
+
+            // Only fetch if not cached
+            if (!cachedStudents && getStudentsFn) {
+                console.log('[Cache] Preloading students...');
+                promises.push(
+                    getStudentsFn().then(students => {
+                        cacheStudentList(students, cacheKey);
+                        console.log(`[Cache] Cached ${students.length} students`);
+                    }).catch(e => console.warn('[Cache] Failed to preload students:', e))
+                );
+            } else if (cachedStudents) {
+                console.log('[Cache] Students already cached');
+            }
+
+            if (!cachedFOs && getFOsFn) {
+                console.log('[Cache] Preloading FOs...');
+                promises.push(
+                    getFOsFn().then(fos => {
+                        cacheFOList(fos, cacheKey, 'all');
+                        console.log(`[Cache] Cached ${fos.length} FOs`);
+                    }).catch(e => console.warn('[Cache] Failed to preload FOs:', e))
+                );
+            } else if (cachedFOs) {
+                console.log('[Cache] FOs already cached');
+            }
+
+            await Promise.all(promises);
+            cacheWarmed = true;
+            console.log('[Cache] Warming complete');
+
+        } catch (error) {
+            console.error('[Cache] Warming failed:', error);
+        } finally {
+            cacheWarmingPromise = null;
+        }
+    })();
+
+    return cacheWarmingPromise;
+}
+
+/**
+ * Check if cache is warmed
+ * @returns {boolean}
+ */
+export function isCacheWarmed() {
+    return cacheWarmed;
+}
+
+/**
+ * Reset cache warmed state (for logout)
+ */
+export function resetCacheWarmedState() {
+    cacheWarmed = false;
+    cacheWarmingPromise = null;
+}
+
+// ============================================
+// Cache Statistics (for debugging/monitoring)
+// ============================================
+
+/**
+ * Get cache statistics
+ * @returns {Object} Cache stats
+ */
+export function getCacheStats() {
+    let memoryItems = 0;
+    let sessionItems = 0;
+    let persistentItems = 0;
+
+    // Count memory cache items
+    memoryItems = memoryCache.size;
+
+    // Count sessionStorage items
+    try {
+        for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith(STORAGE_PREFIX)) {
+                sessionItems++;
+            }
+        }
+    } catch (e) { }
+
+    // Count localStorage items
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(LOCAL_STORAGE_PREFIX)) {
+                persistentItems++;
+            }
+        }
+    } catch (e) { }
+
+    return {
+        memoryItems,
+        sessionItems,
+        persistentItems,
+        totalItems: memoryItems + sessionItems + persistentItems,
+        cacheWarmed
+    };
+}
+
+// ============================================
 // Utility exports
 // ============================================
 
@@ -434,3 +669,4 @@ export const CACHE_TTL = TTL;
 
 // Initialize by clearing expired items
 clearExpiredCache();
+clearExpiredPersistentCache();

@@ -15,11 +15,31 @@ import {
     serverTimestamp
 } from 'firebase/firestore';
 import { getSession } from '../firebase/auth.js';
-import { AI_CONFIGS_COLLECTION, AI_LOGS_COLLECTION, DEFAULT_AI_MODEL, AI_CONTEXT_DAYS } from '../constants/aiConfig.js';
+import { AI_CONFIGS_COLLECTION, AI_LOGS_COLLECTION, DEFAULT_AI_MODEL, AI_CONTEXT_DAYS, AI_CONFIG } from '../constants/aiConfig.js';
 import { generateSystemPrompt, generateContextPrompt, SUGGESTED_QUERIES } from '../utils/aiPrompts.js';
 import { getCachedAIData, cacheAIData, CACHE_TTL } from './cacheService.js';
 
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+/**
+ * List of valid Gemini model IDs
+ * Models must exist in Google's Gemini API
+ */
+const VALID_MODELS = Object.keys(AI_CONFIG.models);
+
+/**
+ * Validate and get a valid model ID
+ * Falls back to DEFAULT_AI_MODEL if stored model is invalid
+ * @param {string} model - Model ID to validate
+ * @returns {string} Valid model ID
+ */
+function getValidModel(model) {
+    if (model && VALID_MODELS.includes(model)) {
+        return model;
+    }
+    console.warn(`[AI] Invalid model "${model}", falling back to ${DEFAULT_AI_MODEL}`);
+    return DEFAULT_AI_MODEL;
+}
 
 /**
  * Get AI API key for the current user's company
@@ -43,7 +63,11 @@ async function getAIConfig() {
         const configSnap = await getDoc(configRef);
 
         if (configSnap.exists()) {
-            return configSnap.data();
+            const config = configSnap.data();
+            // Validate model and fallback if invalid
+            config.model = getValidModel(config.model);
+            console.log(`[AI] Using model: ${config.model} for ${configKey}`);
+            return config;
         }
 
         // Fallback to environment variable or throw error
@@ -83,7 +107,10 @@ async function callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextDa
         ? `${systemPrompt}\n\nDADOS ATUAIS DO SISTEMA:\n${contextData}\n\nPERGUNTA DO USUÁRIO: ${userMessage}`
         : `${systemPrompt}\n\nPERGUNTA DO USUÁRIO: ${userMessage}`;
 
-    const response = await fetch(`${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`, {
+    const apiUrl = `${GEMINI_API_URL}/${model}:generateContent?key=${apiKey}`;
+    console.log(`[AI] Calling Gemini API: ${GEMINI_API_URL}/${model}:generateContent`);
+
+    const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -109,9 +136,32 @@ async function callGeminiAPI(apiKey, model, systemPrompt, userMessage, contextDa
         })
     });
 
+    console.log(`[AI] Response status: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Erro na API do Gemini');
+        let errorMessage = 'Erro na API do Gemini';
+        try {
+            const error = await response.json();
+            console.error('[AI] API Error:', error);
+            const apiError = error.error?.message || '';
+
+            // Translate common API errors to Portuguese
+            if (response.status === 404) {
+                errorMessage = `Modelo "${model}" não encontrado. Verifique as configurações de IA.`;
+            } else if (response.status === 401 || response.status === 403) {
+                errorMessage = 'API key inválida ou sem permissão. Verifique a configuração.';
+            } else if (response.status === 429 || apiError.toLowerCase().includes('quota') || apiError.toLowerCase().includes('rate')) {
+                errorMessage = 'Limite de requisições atingido. Tente novamente em alguns minutos.';
+            } else if (response.status === 400) {
+                errorMessage = `Erro na requisição: ${apiError || 'Parâmetros inválidos'}`;
+            } else if (apiError) {
+                errorMessage = apiError;
+            }
+        } catch (parseError) {
+            // Failed to parse error response
+            errorMessage = `Erro ${response.status}: ${response.statusText || 'Falha na comunicação com a API'}`;
+        }
+        throw new Error(errorMessage);
     }
 
     const data = await response.json();
