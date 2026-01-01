@@ -364,25 +364,55 @@ async function gatherContextData(userQuery) {
     const studentNumberMatch = lowerQuery.match(/(?:aluno|número|n[º°]|num)\s*(\d{4,6})/i);
     const studentNumber = studentNumberMatch ? studentNumberMatch[1] : null;
 
-    // Check if user is requesting RICM framing (for auto-fetch student history)
-    const isFramingQuery = lowerQuery.includes('enquadr') || lowerQuery.includes('ricm') ||
-                           lowerQuery.includes('artigo') || lowerQuery.includes('falta') && lowerQuery.includes('qual');
+    // ============================================
+    // NEW SEARCH FEATURES - Priority detection
+    // ============================================
 
-    // Student History (individual student analysis)
-    // ALSO fetch if framing query AND student number mentioned (for atenuantes/agravantes analysis)
+    // 1. TEXT SEARCH - Search FOs by description/keyword
+    const isTextSearch = lowerQuery.match(/(?:menciona|mencionam|referencia|referência|contém|contem|busque|encontre|sobre|descreve|descrita)/i);
+    if (isTextSearch) {
+        contextData.foSearch = await searchFOsByKeyword(userQuery, companyFilter);
+    }
+
+    // 2. DATE SEARCH - Search FOs by date
+    const isDateSearch = lowerQuery.match(
+        /(?:hoje|ontem|semana\s+passada|última\s+semana|ultima\s+semana|esta\s+semana|semana\s+atual|mês\s+passado|mes\s+passado|último\s+mês|ultimo\s+mes|janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|\d{1,2}[\/\-]\d{1,2})/i
+    );
+    if (isDateSearch && !isTextSearch) { // Don't run if text search already running
+        contextData.foByDate = await getFOsByDateRange(userQuery, companyFilter);
+    }
+
+    // 3. STUDENT NAME SEARCH - Search by student name (not number)
+    const studentNameMatch = lowerQuery.match(/(?:aluno|fos\s+do|histórico\s+do|historico\s+do)\s+([a-záéíóúâêîôûãõç\s]{3,}?)(?:\s+(?:da|do|de|na|no)|$|\?)/i);
+    if (studentNameMatch && !studentNumber) {
+        const searchName = studentNameMatch[1].trim();
+        if (searchName.length >= 3 && !searchName.match(/^\d+$/)) {
+            contextData.studentNameSearch = await searchStudentsByName(searchName, companyFilter);
+        }
+    }
+
+    // 4. TURMA DEEP DIVE - Specific turma analysis
+    const turmaMatch = lowerQuery.match(/(?:turma|classe|sala)\s+([a-z0-9]+)/i);
+    const isTurmaDeepDive = turmaMatch && (lowerQuery.includes('análise') || lowerQuery.includes('analise') ||
+        lowerQuery.includes('problema') || lowerQuery.includes('detalhe') || lowerQuery.includes('situação'));
+    if (isTurmaDeepDive && turmaMatch) {
+        contextData.turmaDeepDive = await getTurmaDeepDive(turmaMatch[1], companyFilter);
+    }
+
+    // 5. COMPANY COMPARISON - Compare across companies (Admin only)
+    const isCompanyComparison = lowerQuery.match(/(?:compar|ranking|entre|todas)\s*(?:as\s+)?(?:companhias|cias|subunidades)/i);
+    if (isCompanyComparison) {
+        contextData.companyComparison = await getCompanyComparison();
+    }
+
+    // ============================================
+    // EXISTING FEATURES
+    // ============================================
+
+    // Student History (individual student analysis by number)
     if (studentNumber) {
-        if (lowerQuery.includes('histórico') || lowerQuery.includes('historico') || isFramingQuery) {
+        if (lowerQuery.includes('histórico') || lowerQuery.includes('historico') || lowerQuery.includes('fos do')) {
             contextData.studentHistory = await getStudentHistory(studentNumber, companyFilter);
-
-            // Add context note for framing queries
-            if (isFramingQuery && contextData.studentHistory && !contextData.studentHistory.error) {
-                contextData.framingContext = {
-                    note: `CONTEXTO PARA ENQUADRAMENTO: Aluno ${studentNumber} tem histórico conhecido (use para analisar reincidência/primeira falta)`,
-                    isFirstOffense: contextData.studentHistory.totalFOs === 0,
-                    hasNegativeHistory: contextData.studentHistory.negativos > 0,
-                    previousSimilar: false // Would need more complex logic to detect similar violations
-                };
-            }
         }
     }
 
@@ -1282,6 +1312,501 @@ const PEDAGOGICAL_KEYWORDS = [
     'celular', 'usando celular', 'mexendo no celular'
 ];
 
+// ============================================
+// NEW SEARCH FEATURES - ZERO FIREBASE READS
+// ============================================
+
+/**
+ * Month names in Portuguese for date parsing
+ */
+const MONTH_NAMES = {
+    'janeiro': 0, 'fevereiro': 1, 'março': 2, 'marco': 2, 'abril': 3,
+    'maio': 4, 'junho': 5, 'julho': 6, 'agosto': 7,
+    'setembro': 8, 'outubro': 9, 'novembro': 10, 'dezembro': 11
+};
+
+/**
+ * Search FOs by keyword/description text
+ * ZERO Firebase reads - uses cached getAllFOs()
+ */
+async function searchFOsByKeyword(keyword, companyFilter) {
+    const cacheKey = `foSearch_${keyword.toLowerCase().replace(/\s+/g, '_')}`;
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached FO search for', keyword);
+        return cached;
+    }
+
+    console.log('[AI Search] Searching FOs for keyword:', keyword);
+
+    // Get all FOs (uses cache - 0 new reads)
+    const fos = await getAllFOs(companyFilter);
+
+    // Extract search terms (remove common words)
+    const stopWords = ['que', 'de', 'da', 'do', 'em', 'para', 'com', 'os', 'as', 'um', 'uma', 'fos', 'fo', 'menciona', 'mencionam', 'referencia', 'referência', 'sobre', 'contém', 'busque', 'encontre'];
+    const searchTerms = keyword.toLowerCase()
+        .split(/\s+/)
+        .filter(term => term.length > 2 && !stopWords.includes(term));
+
+    if (searchTerms.length === 0) {
+        return { error: 'Nenhum termo de busca válido encontrado.' };
+    }
+
+    // Filter FOs by description
+    const matches = fos.filter(fo => {
+        const descricao = (fo.descricao || '').toLowerCase();
+        return searchTerms.some(term => descricao.includes(term));
+    });
+
+    // Sort by date (most recent first)
+    matches.sort((a, b) => new Date(b.dataFato || b.dataRegistro) - new Date(a.dataFato || a.dataRegistro));
+
+    // Aggregate by type
+    const byType = {
+        positivos: matches.filter(f => f.tipo === 'positivo').length,
+        negativos: matches.filter(f => f.tipo === 'negativo').length,
+        neutros: matches.filter(f => f.tipo === 'neutro').length
+    };
+
+    // Aggregate by student
+    const byStudent = {};
+    matches.forEach(fo => {
+        const studentNum = fo.studentNumbers?.[0];
+        if (studentNum) {
+            if (!byStudent[studentNum]) {
+                byStudent[studentNum] = {
+                    numero: studentNum,
+                    nome: fo.studentInfo?.[0]?.nome || 'Desconhecido',
+                    turma: fo.studentInfo?.[0]?.turma || '?',
+                    count: 0
+                };
+            }
+            byStudent[studentNum].count++;
+        }
+    });
+
+    const result = {
+        searchTerms,
+        totalFound: matches.length,
+        byType,
+        topStudents: Object.values(byStudent)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10),
+        recentFOs: matches.slice(0, 15).map(fo => ({
+            data: fo.dataFato || fo.dataRegistro,
+            tipo: fo.tipo,
+            descricao: fo.descricao?.substring(0, 100),
+            numero: fo.studentNumbers?.[0],
+            nome: fo.studentInfo?.[0]?.nome,
+            turma: fo.studentInfo?.[0]?.turma,
+            sancao: fo.sancaoDisciplinar
+        }))
+    };
+
+    // Cache for 2 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.FOS);
+
+    return result;
+}
+
+/**
+ * Parse date range from natural language query
+ */
+function parseDateRange(query) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const lowerQuery = query.toLowerCase();
+
+    // "hoje"
+    if (lowerQuery.includes('hoje')) {
+        const end = new Date(today);
+        end.setHours(23, 59, 59, 999);
+        return { start: today, end };
+    }
+
+    // "ontem"
+    if (lowerQuery.includes('ontem')) {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const end = new Date(yesterday);
+        end.setHours(23, 59, 59, 999);
+        return { start: yesterday, end };
+    }
+
+    // "semana passada" or "última semana"
+    if (lowerQuery.includes('semana passada') || lowerQuery.includes('última semana') || lowerQuery.includes('ultima semana')) {
+        const endOfLastWeek = new Date(today);
+        endOfLastWeek.setDate(today.getDate() - today.getDay()); // Start of this week (Sunday)
+        endOfLastWeek.setDate(endOfLastWeek.getDate() - 1); // Saturday of last week
+        endOfLastWeek.setHours(23, 59, 59, 999);
+
+        const startOfLastWeek = new Date(endOfLastWeek);
+        startOfLastWeek.setDate(startOfLastWeek.getDate() - 6); // Sunday of last week
+        startOfLastWeek.setHours(0, 0, 0, 0);
+
+        return { start: startOfLastWeek, end: endOfLastWeek };
+    }
+
+    // "esta semana" or "semana atual"
+    if (lowerQuery.includes('esta semana') || lowerQuery.includes('semana atual')) {
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        const end = new Date(today);
+        end.setHours(23, 59, 59, 999);
+        return { start: startOfWeek, end };
+    }
+
+    // "mês passado" or "último mês"
+    if (lowerQuery.includes('mês passado') || lowerQuery.includes('mes passado') || lowerQuery.includes('último mês') || lowerQuery.includes('ultimo mes')) {
+        const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        endOfLastMonth.setHours(23, 59, 59, 999);
+        return { start: startOfLastMonth, end: endOfLastMonth };
+    }
+
+    // Month name (e.g., "janeiro", "fevereiro")
+    for (const [monthName, monthIndex] of Object.entries(MONTH_NAMES)) {
+        if (lowerQuery.includes(monthName)) {
+            // Check if year is mentioned
+            const yearMatch = lowerQuery.match(/\b(202\d)\b/);
+            const year = yearMatch ? parseInt(yearMatch[1]) : today.getFullYear();
+
+            const startOfMonth = new Date(year, monthIndex, 1);
+            const endOfMonth = new Date(year, monthIndex + 1, 0);
+            endOfMonth.setHours(23, 59, 59, 999);
+            return { start: startOfMonth, end: endOfMonth };
+        }
+    }
+
+    // Specific date: dd/mm or dd/mm/yyyy
+    const dateMatch = lowerQuery.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+    if (dateMatch) {
+        const day = parseInt(dateMatch[1]);
+        const month = parseInt(dateMatch[2]) - 1;
+        let year = dateMatch[3] ? parseInt(dateMatch[3]) : today.getFullYear();
+        if (year < 100) year += 2000;
+
+        const specificDate = new Date(year, month, day);
+        const end = new Date(specificDate);
+        end.setHours(23, 59, 59, 999);
+        return { start: specificDate, end };
+    }
+
+    // Default: last 7 days
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    const end = new Date(today);
+    end.setHours(23, 59, 59, 999);
+    return { start: sevenDaysAgo, end };
+}
+
+/**
+ * Get FOs by date range
+ * ZERO Firebase reads - uses cached getAllFOs()
+ */
+async function getFOsByDateRange(query, companyFilter) {
+    const dateRange = parseDateRange(query);
+    const cacheKey = `foByDate_${dateRange.start.toISOString().split('T')[0]}_${dateRange.end.toISOString().split('T')[0]}`;
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached FO date search');
+        return cached;
+    }
+
+    console.log('[AI Search] Searching FOs by date:', dateRange.start.toLocaleDateString('pt-BR'), 'to', dateRange.end.toLocaleDateString('pt-BR'));
+
+    // Get all FOs (uses cache - 0 new reads)
+    const fos = await getAllFOs(companyFilter);
+
+    // Filter by date
+    const matches = fos.filter(fo => {
+        const foDateStr = fo.dataFato || fo.dataRegistro;
+        if (!foDateStr) return false;
+        const foDate = new Date(foDateStr);
+        return foDate >= dateRange.start && foDate <= dateRange.end;
+    });
+
+    // Sort by date (most recent first)
+    matches.sort((a, b) => new Date(b.dataFato || b.dataRegistro) - new Date(a.dataFato || a.dataRegistro));
+
+    const result = {
+        periodo: `${dateRange.start.toLocaleDateString('pt-BR')} a ${dateRange.end.toLocaleDateString('pt-BR')}`,
+        totalFound: matches.length,
+        byType: {
+            positivos: matches.filter(f => f.tipo === 'positivo').length,
+            negativos: matches.filter(f => f.tipo === 'negativo').length,
+            neutros: matches.filter(f => f.tipo === 'neutro').length
+        },
+        bySanction: {
+            advertencia: matches.filter(f => f.sancaoDisciplinar === 'ADVERTENCIA').length,
+            repreensao: matches.filter(f => f.sancaoDisciplinar === 'REPREENSAO').length,
+            aoe: matches.filter(f => f.sancaoDisciplinar === 'ATIVIDADE_OE').length,
+            retirada: matches.filter(f => f.sancaoDisciplinar === 'RETIRADA').length,
+            justificado: matches.filter(f => f.sancaoDisciplinar === 'JUSTIFICADO').length
+        },
+        recentFOs: matches.slice(0, 15).map(fo => ({
+            data: fo.dataFato || fo.dataRegistro,
+            tipo: fo.tipo,
+            descricao: fo.descricao?.substring(0, 80),
+            numero: fo.studentNumbers?.[0],
+            nome: fo.studentInfo?.[0]?.nome,
+            turma: fo.studentInfo?.[0]?.turma,
+            sancao: fo.sancaoDisciplinar
+        }))
+    };
+
+    // Cache for 2 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.FOS);
+
+    return result;
+}
+
+/**
+ * Search students by name (from FO denormalized data)
+ * ZERO Firebase reads - uses cached getAllFOs()
+ */
+async function searchStudentsByName(searchName, companyFilter) {
+    const cacheKey = `studentSearch_${searchName.toLowerCase().replace(/\s+/g, '_')}`;
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached student search for', searchName);
+        return cached;
+    }
+
+    console.log('[AI Search] Searching students by name:', searchName);
+
+    // Get all FOs (uses cache - 0 new reads)
+    const fos = await getAllFOs(companyFilter);
+
+    const searchTerm = searchName.toLowerCase();
+
+    // Find FOs with matching student name
+    const matches = fos.filter(fo => {
+        const studentName = (fo.studentInfo?.[0]?.nome || '').toLowerCase();
+        return studentName.includes(searchTerm);
+    });
+
+    // Aggregate by student
+    const studentStats = {};
+    matches.forEach(fo => {
+        const studentNum = fo.studentNumbers?.[0];
+        const studentName = fo.studentInfo?.[0]?.nome;
+        if (!studentNum || !studentName) return;
+
+        if (!studentStats[studentNum]) {
+            studentStats[studentNum] = {
+                numero: studentNum,
+                nome: studentName,
+                turma: fo.studentInfo?.[0]?.turma || '?',
+                company: fo.company,
+                total: 0,
+                positivos: 0,
+                negativos: 0,
+                neutros: 0,
+                sanctions: { advertencia: 0, repreensao: 0, aoe: 0, retirada: 0 },
+                recentFOs: []
+            };
+        }
+
+        const s = studentStats[studentNum];
+        s.total++;
+        if (fo.tipo === 'positivo') s.positivos++;
+        if (fo.tipo === 'negativo') s.negativos++;
+        if (fo.tipo === 'neutro') s.neutros++;
+        if (fo.sancaoDisciplinar === 'ADVERTENCIA') s.sanctions.advertencia++;
+        if (fo.sancaoDisciplinar === 'REPREENSAO') s.sanctions.repreensao++;
+        if (fo.sancaoDisciplinar === 'ATIVIDADE_OE') s.sanctions.aoe++;
+        if (fo.sancaoDisciplinar === 'RETIRADA') s.sanctions.retirada++;
+
+        if (s.recentFOs.length < 5) {
+            s.recentFOs.push({
+                data: fo.dataFato || fo.dataRegistro,
+                tipo: fo.tipo,
+                descricao: fo.descricao?.substring(0, 80)
+            });
+        }
+    });
+
+    const students = Object.values(studentStats).sort((a, b) => b.total - a.total);
+
+    const result = {
+        searchTerm,
+        studentsFound: students.length,
+        totalFOs: matches.length,
+        students: students.slice(0, 10)
+    };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
+}
+
+/**
+ * Get deep analysis for a specific turma
+ * ZERO Firebase reads - uses cached getAllFOs()
+ */
+async function getTurmaDeepDive(turmaName, companyFilter) {
+    const cacheKey = `turmaDeepDive_${turmaName.toLowerCase().replace(/\s+/g, '_')}`;
+    const company = companyFilter || 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached turma analysis for', turmaName);
+        return cached;
+    }
+
+    console.log('[AI Search] Analyzing turma:', turmaName);
+
+    // Get all FOs (uses cache - 0 new reads)
+    const fos = await getAllFOs(companyFilter);
+
+    const searchTurma = turmaName.toLowerCase();
+
+    // Filter by turma
+    const turmaFOs = fos.filter(fo => {
+        const turma = (fo.studentInfo?.[0]?.turma || '').toLowerCase();
+        return turma.includes(searchTurma);
+    });
+
+    if (turmaFOs.length === 0) {
+        return { error: `Nenhum FO encontrado para a turma "${turmaName}".` };
+    }
+
+    // Aggregate students in this turma
+    const studentsInTurma = new Set();
+    const studentProblems = {};
+
+    turmaFOs.forEach(fo => {
+        const studentNum = fo.studentNumbers?.[0];
+        if (studentNum) {
+            studentsInTurma.add(studentNum);
+
+            if (!studentProblems[studentNum]) {
+                studentProblems[studentNum] = {
+                    numero: studentNum,
+                    nome: fo.studentInfo?.[0]?.nome || 'Desconhecido',
+                    negativos: 0,
+                    sanctions: 0
+                };
+            }
+            if (fo.tipo === 'negativo') studentProblems[studentNum].negativos++;
+            if (fo.sancaoDisciplinar) studentProblems[studentNum].sanctions++;
+        }
+    });
+
+    // Pedagogical issues
+    const pedagogicalCount = turmaFOs.filter(fo =>
+        PEDAGOGICAL_KEYWORDS.some(kw => (fo.descricao || '').toLowerCase().includes(kw))
+    ).length;
+
+    const result = {
+        turma: turmaName,
+        totalFOs: turmaFOs.length,
+        studentsCount: studentsInTurma.size,
+        avgFOsPerStudent: (turmaFOs.length / studentsInTurma.size).toFixed(2),
+        byType: {
+            positivos: turmaFOs.filter(f => f.tipo === 'positivo').length,
+            negativos: turmaFOs.filter(f => f.tipo === 'negativo').length,
+            neutros: turmaFOs.filter(f => f.tipo === 'neutro').length
+        },
+        bySanction: {
+            advertencia: turmaFOs.filter(f => f.sancaoDisciplinar === 'ADVERTENCIA').length,
+            repreensao: turmaFOs.filter(f => f.sancaoDisciplinar === 'REPREENSAO').length,
+            aoe: turmaFOs.filter(f => f.sancaoDisciplinar === 'ATIVIDADE_OE').length,
+            retirada: turmaFOs.filter(f => f.sancaoDisciplinar === 'RETIRADA').length
+        },
+        pedagogicalConcerns: pedagogicalCount,
+        problematicStudents: Object.values(studentProblems)
+            .filter(s => s.negativos >= 2 || s.sanctions >= 1)
+            .sort((a, b) => (b.negativos + b.sanctions) - (a.negativos + a.sanctions))
+            .slice(0, 10)
+    };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
+}
+
+/**
+ * Compare statistics across all companies
+ * ZERO Firebase reads - uses cached getAllFOs()
+ * Only for Admin/ComandoCA
+ */
+async function getCompanyComparison() {
+    const session = getSession();
+
+    // Only allow admins/comandoCA
+    if (session?.role !== 'admin' && session?.role !== 'comandoCA') {
+        return { error: 'Comparação entre companhias disponível apenas para Admin/Comando CA.' };
+    }
+
+    const cacheKey = 'companyComparison';
+    const company = 'all';
+
+    // Try cache first
+    const cached = getCachedAIData(cacheKey, company);
+    if (cached) {
+        console.log('[AI Cache] Using cached company comparison');
+        return cached;
+    }
+
+    console.log('[AI Search] Comparing companies');
+
+    // Get ALL FOs (no company filter) - uses cache
+    const fos = await getAllFOs(null);
+
+    // Group by company
+    const byCompany = {};
+    fos.forEach(fo => {
+        const cia = fo.company || 'Sem Companhia';
+        if (!byCompany[cia]) {
+            byCompany[cia] = [];
+        }
+        byCompany[cia].push(fo);
+    });
+
+    // Calculate stats per company
+    const comparison = Object.entries(byCompany)
+        .map(([company, companyFOs]) => ({
+            company,
+            total: companyFOs.length,
+            positivos: companyFOs.filter(f => f.tipo === 'positivo').length,
+            negativos: companyFOs.filter(f => f.tipo === 'negativo').length,
+            neutros: companyFOs.filter(f => f.tipo === 'neutro').length,
+            sancoesGraves: companyFOs.filter(f => ['RETIRADA', 'ATIVIDADE_OE'].includes(f.sancaoDisciplinar)).length,
+            negativosPercentage: companyFOs.length > 0
+                ? ((companyFOs.filter(f => f.tipo === 'negativo').length / companyFOs.length) * 100).toFixed(1)
+                : 0
+        }))
+        .sort((a, b) => b.total - a.total);
+
+    const result = {
+        totalCompanies: comparison.length,
+        totalFOs: fos.length,
+        comparison,
+        bestPositive: comparison.sort((a, b) => b.positivos - a.positivos)[0],
+        worstNegative: comparison.sort((a, b) => b.negativos - a.negativos)[0]
+    };
+
+    // Cache for 5 minutes
+    cacheAIData(cacheKey, result, company, CACHE_TTL.STATS);
+
+    return result;
+}
+
 /**
  * Get pedagogical FOs (learning-related) for the week (with cache)
  * Only available to Cmt Cia for their company
@@ -1380,15 +1905,144 @@ async function getPedagogicalFOs(companyFilter) {
 function formatContextForPrompt(contextData) {
     let formatted = '';
 
-    // FRAMING CONTEXT (for RICM enquadramento with student history)
-    if (contextData.framingContext) {
-        formatted += `\n⚠️ ${contextData.framingContext.note}
-- É primeira falta? ${contextData.framingContext.isFirstOffense ? 'SIM - CONSIDERE ATENUANTE ITEM 4' : 'NÃO'}
-- Tem histórico negativo? ${contextData.framingContext.hasNegativeHistory ? 'SIM - CONSIDERE AGRAVANTE ITEM 5 (reincidência)' : 'NÃO'}
-- Comportamento exemplar? ${!contextData.framingContext.hasNegativeHistory ? 'SIM - CONSIDERE ATENUANTE ITEM 2' : 'NÃO'}\n`;
+    // ============================================
+    // NEW SEARCH FEATURES FORMATTING
+    // ============================================
+
+    // TEXT SEARCH RESULTS
+    if (contextData.foSearch) {
+        const fs = contextData.foSearch;
+        if (fs.error) {
+            formatted += `\n=== BUSCA POR TEXTO ===\nERRO: ${fs.error}\n`;
+        } else {
+            formatted += `\n=== BUSCA POR TEXTO ===
+Termos buscados: ${fs.searchTerms?.join(', ')}
+Total encontrado: ${fs.totalFound} FOs
+
+POR TIPO:
+- Positivos: ${fs.byType?.positivos || 0}
+- Negativos: ${fs.byType?.negativos || 0}
+- Neutros: ${fs.byType?.neutros || 0}
+
+ALUNOS COM MAIS OCORRÊNCIAS:\n`;
+            fs.topStudents?.forEach((s, i) => {
+                formatted += `${i + 1}. Nº ${s.numero} - ${s.nome} (${s.turma}): ${s.count} FOs\n`;
+            });
+
+            if (fs.recentFOs?.length > 0) {
+                formatted += `\nFOs ENCONTRADOS (mais recentes):\n`;
+                fs.recentFOs.forEach((fo, i) => {
+                    formatted += `${i + 1}. ${fo.data} | ${fo.tipo?.toUpperCase()} | Nº ${fo.numero} - ${fo.nome}\n   "${fo.descricao}..."\n`;
+                });
+            }
+        }
     }
 
-    // NEW FEATURES FORMATTING
+    // DATE SEARCH RESULTS
+    if (contextData.foByDate) {
+        const fd = contextData.foByDate;
+        formatted += `\n=== FOs POR DATA ===
+Período: ${fd.periodo}
+Total encontrado: ${fd.totalFound} FOs
+
+POR TIPO:
+- Positivos: ${fd.byType?.positivos || 0}
+- Negativos: ${fd.byType?.negativos || 0}
+- Neutros: ${fd.byType?.neutros || 0}
+
+POR SANÇÃO:
+- Advertências: ${fd.bySanction?.advertencia || 0}
+- Repreensões: ${fd.bySanction?.repreensao || 0}
+- AOE: ${fd.bySanction?.aoe || 0}
+- Retiradas: ${fd.bySanction?.retirada || 0}
+- Justificados: ${fd.bySanction?.justificado || 0}`;
+
+        if (fd.recentFOs?.length > 0) {
+            formatted += `\n\nFOs DO PERÍODO:\n`;
+            fd.recentFOs.forEach((fo, i) => {
+                formatted += `${i + 1}. ${fo.data} | ${fo.tipo?.toUpperCase()} | Nº ${fo.numero} - ${fo.nome} (${fo.turma})\n   "${fo.descricao}..." | Sanção: ${fo.sancao || 'N/A'}\n`;
+            });
+        }
+    }
+
+    // STUDENT NAME SEARCH RESULTS
+    if (contextData.studentNameSearch) {
+        const sns = contextData.studentNameSearch;
+        if (sns.error) {
+            formatted += `\n=== BUSCA POR NOME ===\nERRO: ${sns.error}\n`;
+        } else {
+            formatted += `\n=== BUSCA POR NOME: "${sns.searchTerm}" ===
+Alunos encontrados: ${sns.studentsFound}
+Total de FOs: ${sns.totalFOs}
+
+ALUNOS ENCONTRADOS:\n`;
+            sns.students?.forEach((s, i) => {
+                formatted += `${i + 1}. Nº ${s.numero} - ${s.nome} (Turma ${s.turma}, ${s.company})
+   Total: ${s.total} FOs | +${s.positivos} -${s.negativos} ~${s.neutros}
+   Sanções: Adv(${s.sanctions.advertencia}) Rep(${s.sanctions.repreensao}) AOE(${s.sanctions.aoe}) Ret(${s.sanctions.retirada})\n`;
+            });
+        }
+    }
+
+    // TURMA DEEP DIVE RESULTS
+    if (contextData.turmaDeepDive) {
+        const td = contextData.turmaDeepDive;
+        if (td.error) {
+            formatted += `\n=== ANÁLISE DE TURMA ===\nERRO: ${td.error}\n`;
+        } else {
+            formatted += `\n=== ANÁLISE DETALHADA: TURMA ${td.turma} ===
+Total de FOs: ${td.totalFOs}
+Alunos envolvidos: ${td.studentsCount}
+Média FOs/aluno: ${td.avgFOsPerStudent}
+Problemas pedagógicos: ${td.pedagogicalConcerns}
+
+POR TIPO:
+- Positivos: ${td.byType?.positivos || 0}
+- Negativos: ${td.byType?.negativos || 0}
+- Neutros: ${td.byType?.neutros || 0}
+
+POR SANÇÃO:
+- Advertências: ${td.bySanction?.advertencia || 0}
+- Repreensões: ${td.bySanction?.repreensao || 0}
+- AOE: ${td.bySanction?.aoe || 0}
+- Retiradas: ${td.bySanction?.retirada || 0}`;
+
+            if (td.problematicStudents?.length > 0) {
+                formatted += `\n\nALUNOS PROBLEMÁTICOS DA TURMA:\n`;
+                td.problematicStudents.forEach((s, i) => {
+                    formatted += `${i + 1}. Nº ${s.numero} - ${s.nome}: ${s.negativos} negativos, ${s.sanctions} sanções\n`;
+                });
+            }
+        }
+    }
+
+    // COMPANY COMPARISON RESULTS
+    if (contextData.companyComparison) {
+        const cc = contextData.companyComparison;
+        if (cc.error) {
+            formatted += `\n=== COMPARAÇÃO ENTRE COMPANHIAS ===\nERRO: ${cc.error}\n`;
+        } else {
+            formatted += `\n=== COMPARAÇÃO ENTRE COMPANHIAS ===
+Total de companhias: ${cc.totalCompanies}
+Total de FOs: ${cc.totalFOs}
+
+RANKING POR TOTAL DE FOs:\n`;
+            cc.comparison?.forEach((c, i) => {
+                formatted += `${i + 1}. ${c.company}: ${c.total} FOs | +${c.positivos} -${c.negativos} ~${c.neutros} | ${c.negativosPercentage}% negativos | ${c.sancoesGraves} sanções graves\n`;
+            });
+
+            if (cc.bestPositive) {
+                formatted += `\nMais FOs positivos: ${cc.bestPositive.company} (${cc.bestPositive.positivos})\n`;
+            }
+            if (cc.worstNegative) {
+                formatted += `Mais FOs negativos: ${cc.worstNegative.company} (${cc.worstNegative.negativos})\n`;
+            }
+        }
+    }
+
+    // ============================================
+    // EXISTING FEATURES FORMATTING
+    // ============================================
 
     if (contextData.studentHistory) {
         const sh = contextData.studentHistory;

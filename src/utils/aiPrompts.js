@@ -1,8 +1,6 @@
 // AI Prompts and Templates
 // Gestão Centralizada FO - CMB
 
-import { FALTAS_DISCIPLINARES, ATENUANTES, AGRAVANTES } from '../constants/ricm.js';
-
 /**
  * Generate the system prompt for the AI assistant
  * @param {Object} session - User session data
@@ -29,9 +27,17 @@ CONTEXTO:
 
 SUAS FUNÇÕES PRINCIPAIS:
 1. Fornecer estatísticas e análises de Fatos Observados (FOs)
-2. Sugerir enquadramentos RICM para infrações
+2. Buscar FOs por descrição, data, aluno ou turma
 3. Identificar padrões e alunos em situação de risco
-4. Auxiliar na gestão disciplinar com dados precisos
+4. Comparar períodos e companhias
+5. Auxiliar na gestão disciplinar com dados precisos
+
+CAPACIDADES DE BUSCA:
+- Busca por texto: "FOs que mencionam atraso", "busque por uniforme"
+- Busca por data: "FOs de 15/01", "FOs da semana passada"
+- Busca por aluno: "FOs do aluno Silva", "histórico do 12345"
+- Busca por turma: "análise da turma 1A", "problemas na turma 2B"
+- Comparações: "compare com mês anterior", "compare companhias"
 
 FORMATO DE RESPOSTA:
 - Use **negrito** para destacar informações importantes
@@ -48,68 +54,10 @@ FORMATO DE RESPOSTA:
 REGRAS OBRIGATÓRIAS:
 - NUNCA invente dados - use APENAS os dados fornecidos
 - Se não houver dados, diga claramente "Não há dados disponíveis para..."
-- Para enquadramentos RICM, SEMPRE cite o número do artigo
 - Seja conciso mas completo
 - Respostas em português brasileiro
 
-REGULAMENTO INTERNO (RICM) - REFERÊNCIA:
-Use estas informações para sugerir enquadramentos quando o usuário descrever um fato:
-
-${generateRICMReference()}
-
-FORMATO PARA ENQUADRAMENTO RICM:
-Quando sugerir enquadramento, use EXATAMENTE este formato:
-
-**ENQUADRAMENTO SUGERIDO**
-
-**Artigo:** [Número] - [Texto resumido]
-
-**Agravantes identificados:**
-- [Liste apenas os aplicáveis, ou "Nenhum identificado"]
-
-**Atenuantes identificados:**
-- [Liste apenas os aplicáveis, ou "Nenhum identificado"]
-
-**Gravidade:** [Leve/Média/Grave]
-
-**Sanção provável:** [Advertência/Repreensão/AOE/Retirada]
-
-**Justificativa:** [Explicação breve e objetiva]
-
----
-
-CRITÉRIOS DE GRAVIDADE:
-- **Leve** (Advertência): Faltas de menor potencial ofensivo, primeira ocorrência
-- **Média** (Repreensão/AOE): Faltas que afetam a disciplina, reincidência leve
-- **Grave** (AOE/Retirada): Faltas graves, múltiplas reincidências, danos significativos
-
-VERIFICAÇÃO DE HISTÓRICO:
-- Se houver dados do aluno no contexto, USE para determinar reincidência
-- Primeira falta = atenuante importante
-- Reincidência = agravante importante`;
-}
-
-/**
- * Generate RICM reference text for the AI
- * @returns {string} RICM formatted reference
- */
-function generateRICMReference() {
-    let reference = '=== FALTAS DISCIPLINARES ===\n';
-    FALTAS_DISCIPLINARES.forEach(f => {
-        reference += `${f.id}. ${f.texto}\n`;
-    });
-
-    reference += '\n=== CIRCUNSTÂNCIAS ATENUANTES ===\n';
-    ATENUANTES.forEach(a => {
-        reference += `${a.id}. ${a.texto}\n`;
-    });
-
-    reference += '\n=== CIRCUNSTÂNCIAS AGRAVANTES ===\n';
-    AGRAVANTES.forEach(a => {
-        reference += `${a.id}. ${a.texto}\n`;
-    });
-
-    return reference;
+NOTA: O enquadramento RICM está disponível diretamente no card do FO na página inicial.`;
 }
 
 /**
@@ -235,24 +183,35 @@ export const SUGGESTED_QUERIES = [
     "Estatísticas do mês atual",
     "Compare com o mês anterior",
 
+    // Buscas por texto/descrição
+    "FOs que mencionam atraso",
+    "Busque FOs sobre uniforme",
+    "FOs com referência a celular",
+
+    // Buscas por data
+    "FOs de hoje",
+    "FOs da semana passada",
+    "FOs de janeiro",
+
     // Alunos específicos
     "Histórico do aluno 12345",
+    "FOs do aluno Silva",
     "Alunos em risco de sanção grave",
     "Alunos reincidentes",
 
-    // Enquadramento RICM
-    "Aluno usou celular na aula",
-    "Aluno brigou com colega",
-    "Aluno faltou sem justificativa",
+    // Por turma
+    "Análise da turma 1A",
+    "Turmas com mais problemas",
+    "Problemas pedagógicos por turma",
 
     // Gestão diária
     "Quem está de AOE/Retirada hoje?",
     "FOs para aditamento",
-    "Turmas com mais problemas",
+    "Ranking de observadores",
 
-    // Análises
-    "Maiores faltantes",
+    // Comparações (para Admin/ComandoCA)
+    "Compare as companhias",
     "Comportamento em queda",
-    "Ranking de observadores"
+    "Maiores faltantes"
 ];
 

@@ -63,13 +63,13 @@ export function initAIChat() {
                         Olá! Sou o Assistente do CMB. Posso ajudar com:
                         <ul>
                             <li>Estatísticas de FOs (positivos, negativos, neutros)</li>
-                            <li>Ranking de observadores</li>
-                            <li>FOs para aditamento</li>
-                            <li>Dados de faltas escolares</li>
-                            <li>Sugestão de enquadramento (RICM)</li>
-                            <li>Alunos em AOE/Retirada</li>
-                            <li>Estatísticas de sanções</li>
-                            <li>Comportamento em queda</li>
+                            <li>Buscar FOs por descrição (ex: "FOs que mencionam atraso")</li>
+                            <li>Buscar FOs por data (ex: "FOs de ontem", "FOs de janeiro")</li>
+                            <li>Histórico de alunos (ex: "FOs do aluno Silva")</li>
+                            <li>Análise por turma (ex: "problemas na turma 1A")</li>
+                            <li>Comparações entre períodos e companhias</li>
+                            <li>Alunos em risco, reincidentes, AOE/Retirada</li>
+                            <li>Ranking de observadores e faltantes</li>
                         </ul>
                         Como posso ajudar?
                     </div>
