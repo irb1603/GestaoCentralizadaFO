@@ -2,10 +2,21 @@ import { db } from '../firebase/config.js';
 import { collection, query, where, getDocs, addDoc, orderBy, doc, getDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { icons } from '../utils/icons.js';
-import { FO_STATUS, COMPANY_NAMES, formatDate, TURMA_TO_COMPANY } from '../constants/index.js';
+import { FO_STATUS, COMPANY_NAMES, COMPANY_SHORT_NAMES, formatDate, TURMA_TO_COMPANY, COMPANIES } from '../constants/index.js';
 import { showToast } from '../utils/toast.js';
-import { getSession } from '../firebase/auth.js';
+import { getSession, getCompanyFilter } from '../firebase/auth.js';
 import { logAction } from '../services/auditLogger.js';
+
+// Turmas por companhia (6º ao 3º EM)
+const TURMAS_POR_COMPANHIA = {
+  '6cia': ['6A', '6B', '6C', '6D', '6E', '6F'],
+  '7cia': ['7A', '7B', '7C', '7D', '7E', '7F'],
+  '8cia': ['8A', '8B', '8C', '8D', '8E'],
+  '9cia': ['9A', '9B', '9C', '9D', '9E'],
+  '1cia': ['1A', '1B', '1C', '1D'],
+  '2cia': ['2A', '2B', '2C', '2D'],
+  '3cia': ['3A', '3B', '3C', '3D']
+};
 
 /**
  * Helper function to get company from turma
@@ -37,6 +48,8 @@ function canSeeStudent(student, session) {
  */
 export async function renderProcessoDisciplinarPage(container) {
   const session = getSession();
+  const companyFilter = getCompanyFilter();
+  const isAdminOrComandoCA = session.role === 'admin' || session.role === 'comandoCA';
 
   // Inject styles
   if (!document.getElementById('processo-styles')) {
@@ -45,6 +58,19 @@ export async function renderProcessoDisciplinarPage(container) {
     styleEl.textContent = processoStyles;
     document.head.appendChild(styleEl);
   }
+
+  // Build company options for Admin/ComandoCA
+  const companyOptions = Object.entries(COMPANY_SHORT_NAMES)
+    .map(([key, label]) => `<option value="${key}">${label}</option>`)
+    .join('');
+
+  // Build turma options based on user's company
+  const getTurmaOptions = (company) => {
+    const turmas = TURMAS_POR_COMPANHIA[company] || [];
+    return turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+  };
+
+  const initialTurmaOptions = companyFilter ? getTurmaOptions(companyFilter) : '';
 
   container.innerHTML = `
     <div class="page-header">
@@ -58,13 +84,42 @@ export async function renderProcessoDisciplinarPage(container) {
         </button>
       </div>
     </div>
-    
-    <div class="search-bar" style="display: flex; gap: var(--space-3); align-items: center;">
-      <input type="text" id="search-aluno" placeholder="Digite o número do aluno..." 
-             style="flex: 1; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-light); border-radius: var(--radius-md);">
-      <button class="btn btn--primary" id="search-btn">
-        ${icons.search} Buscar
-      </button>
+
+    <div class="search-filters card" style="padding: var(--space-4); margin-bottom: var(--space-4);">
+      <div class="search-filters__row" style="display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap;">
+        ${isAdminOrComandoCA ? `
+          <div class="form-group" style="margin-bottom: 0; min-width: 150px;">
+            <label class="form-label">Companhia</label>
+            <select id="filter-company" class="form-select">
+              <option value="">Selecione...</option>
+              ${companyOptions}
+            </select>
+          </div>
+        ` : ''}
+
+        <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+          <label class="form-label">Turma</label>
+          <select id="filter-turma" class="form-select" ${!companyFilter && isAdminOrComandoCA ? 'disabled' : ''}>
+            <option value="">Selecione...</option>
+            ${initialTurmaOptions}
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+          <label class="form-label">Número</label>
+          <input type="number" id="search-aluno" class="form-input" placeholder="Nº do aluno"
+                 style="width: 120px;" disabled>
+        </div>
+
+        <button class="btn btn--primary" id="search-btn" disabled>
+          ${icons.search} Buscar
+        </button>
+      </div>
+      <p class="search-hint" style="margin-top: var(--space-2); font-size: var(--font-size-sm); color: var(--text-tertiary);">
+        ${isAdminOrComandoCA
+          ? 'Selecione a companhia, depois a turma e o número do aluno para buscar.'
+          : 'Selecione a turma e o número do aluno para buscar.'}
+      </p>
     </div>
     
     <div id="students-list" class="students-grid" style="margin-top: var(--space-4);">
@@ -131,11 +186,29 @@ export async function renderProcessoDisciplinarPage(container) {
           <button class="processo-modal__close" data-close="processo-modal">&times;</button>
         </div>
         <div class="processo-modal__body">
-          <div class="form-group">
-            <label>Número do Aluno</label>
-            <div style="display: flex; gap: var(--space-2);">
-              <input type="number" id="processo-aluno-input" class="form-input" placeholder="Digite o número do aluno..." style="flex: 1;">
-              <button class="btn btn--secondary" id="btn-buscar-aluno">
+          <div class="processo-filters" style="display: flex; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3);">
+            ${isAdminOrComandoCA ? `
+              <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+                <label class="form-label">Companhia</label>
+                <select id="processo-filter-company" class="form-select">
+                  <option value="">Selecione...</option>
+                  ${companyOptions}
+                </select>
+              </div>
+            ` : ''}
+            <div class="form-group" style="margin-bottom: 0; min-width: 100px;">
+              <label class="form-label">Turma</label>
+              <select id="processo-filter-turma" class="form-select" ${!companyFilter && isAdminOrComandoCA ? 'disabled' : ''}>
+                <option value="">Selecione...</option>
+                ${initialTurmaOptions}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; min-width: 100px;">
+              <label class="form-label">Número</label>
+              <input type="number" id="processo-aluno-input" class="form-input" placeholder="Nº" disabled>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; align-self: flex-end;">
+              <button class="btn btn--secondary" id="btn-buscar-aluno" disabled>
                 ${icons.search} Buscar
               </button>
             </div>
@@ -183,28 +256,58 @@ export async function renderProcessoDisciplinarPage(container) {
   let currentUploadStudent = null;
   let currentUploadType = 'termo'; // 'termo' or 'outros'
 
-  // Search button click
-  const searchBtn = container.querySelector('#search-btn');
+  // Filter elements
+  const filterCompany = container.querySelector('#filter-company');
+  const filterTurma = container.querySelector('#filter-turma');
   const searchInput = container.querySelector('#search-aluno');
+  const searchBtn = container.querySelector('#search-btn');
+
+  // Helper to update turma options
+  function updateTurmaOptions(company) {
+    const turmas = TURMAS_POR_COMPANHIA[company] || [];
+    filterTurma.innerHTML = `<option value="">Selecione...</option>` +
+      turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+    filterTurma.disabled = !company;
+    searchInput.disabled = true;
+    searchInput.value = '';
+    searchBtn.disabled = true;
+  }
+
+  // Company change handler (Admin/ComandoCA only)
+  if (filterCompany) {
+    filterCompany.addEventListener('change', () => {
+      updateTurmaOptions(filterCompany.value);
+    });
+  }
+
+  // Turma change handler
+  filterTurma.addEventListener('change', () => {
+    const hasTurma = !!filterTurma.value;
+    searchInput.disabled = !hasTurma;
+    if (!hasTurma) {
+      searchInput.value = '';
+      searchBtn.disabled = true;
+    }
+  });
+
+  // Number input handler
+  searchInput.addEventListener('input', () => {
+    searchBtn.disabled = !searchInput.value.trim();
+  });
 
   async function searchStudent() {
     const studentNumber = searchInput.value.trim();
+    const selectedTurma = filterTurma.value;
+    const selectedCompany = filterCompany?.value || companyFilter;
     const listContainer = container.querySelector('#students-list');
 
     if (!studentNumber || isNaN(parseInt(studentNumber))) {
-      listContainer.innerHTML = `
-        <div style="grid-column: 1 / -1;">
-          <div class="card">
-            <div class="card__body">
-              <div class="empty-state">
-                <div class="empty-state__icon">${icons.search}</div>
-                <div class="empty-state__title">Buscar Aluno</div>
-                <div class="empty-state__text">Digite o número do aluno para visualizar seu processo disciplinar</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
+      showToast('Digite um número de aluno válido', 'warning');
+      return;
+    }
+
+    if (!selectedTurma) {
+      showToast('Selecione uma turma', 'warning');
       return;
     }
 
@@ -224,6 +327,24 @@ export async function renderProcessoDisciplinarPage(container) {
       studentTermos = {};
       studentOutrosDocs = {};
 
+      // OPTIMIZED: Load student data filtering by TURMA first (reduces reads)
+      const studentQuery = query(
+        collection(db, 'students'),
+        where('turma', '==', selectedTurma),
+        where('numero', '==', studentNum)
+      );
+      const studentSnapshot = await getDocs(studentQuery);
+
+      if (studentSnapshot.empty) {
+        renderStudentsList([]);
+        return;
+      }
+
+      studentSnapshot.docs.forEach(doc => {
+        const student = { id: doc.id, ...doc.data() };
+        allStudents.push(student);
+      });
+
       // Load FOs for this student only
       const fosQuery = query(
         collection(db, 'fatosObservados'),
@@ -237,19 +358,6 @@ export async function renderProcessoDisciplinarPage(container) {
           studentFOs[studentNum] = [];
         }
         studentFOs[studentNum].push(fo);
-      });
-
-      // Load student data
-      const studentQuery = query(
-        collection(db, 'students'),
-        where('numero', '==', studentNum)
-      );
-      const studentSnapshot = await getDocs(studentQuery);
-      studentSnapshot.docs.forEach(doc => {
-        const student = { id: doc.id, ...doc.data() };
-        if (canSeeStudent(student, session)) {
-          allStudents.push(student);
-        }
       });
 
       // Load termos for this student
@@ -297,7 +405,7 @@ export async function renderProcessoDisciplinarPage(container) {
 
   searchBtn.addEventListener('click', searchStudent);
   searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchStudent();
+    if (e.key === 'Enter' && !searchBtn.disabled) searchStudent();
   });
 
   // Setup Gerar Processo button
@@ -312,16 +420,23 @@ export async function renderProcessoDisciplinarPage(container) {
 
   function renderStudentsList(students) {
     const listContainer = container.querySelector('#students-list');
-    const emptyState = container.querySelector('#empty-state');
 
     if (students.length === 0) {
-      listContainer.style.display = 'none';
-      emptyState.style.display = 'block';
+      listContainer.innerHTML = `
+        <div style="grid-column: 1 / -1;">
+          <div class="card">
+            <div class="card__body">
+              <div class="empty-state">
+                <div class="empty-state__icon">${icons.search}</div>
+                <div class="empty-state__title">Aluno não encontrado</div>
+                <div class="empty-state__text">Verifique o número ou os filtros selecionados</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
       return;
     }
-
-    emptyState.style.display = 'none';
-    listContainer.style.display = 'block';
 
     // Group students by turma
     const byTurma = {};
@@ -582,37 +697,80 @@ export async function renderProcessoDisciplinarPage(container) {
 
   function openProcessoModal() {
     const modal = document.getElementById('processo-modal');
-    const searchInput = document.getElementById('processo-aluno-input');
-    const searchBtn = document.getElementById('btn-buscar-aluno');
+    const processoFilterCompany = document.getElementById('processo-filter-company');
+    const processoFilterTurma = document.getElementById('processo-filter-turma');
+    const processoSearchInput = document.getElementById('processo-aluno-input');
+    const processoSearchBtn = document.getElementById('btn-buscar-aluno');
 
     // Reset
-    searchInput.value = '';
+    if (processoFilterCompany) processoFilterCompany.value = '';
+    processoFilterTurma.value = '';
+    processoFilterTurma.innerHTML = `<option value="">Selecione...</option>` + (companyFilter ? getTurmaOptions(companyFilter) : '');
+    processoFilterTurma.disabled = !companyFilter && isAdminOrComandoCA;
+    processoSearchInput.value = '';
+    processoSearchInput.disabled = true;
+    processoSearchBtn.disabled = true;
     document.getElementById('processo-aluno-info').style.display = 'none';
     document.getElementById('processo-fos-container').style.display = 'none';
     document.getElementById('processo-termos-container').style.display = 'none';
     document.getElementById('btn-processo-generate').disabled = true;
 
+    // Company filter change (Admin/ComandoCA only)
+    if (processoFilterCompany) {
+      processoFilterCompany.onchange = () => {
+        const turmas = TURMAS_POR_COMPANHIA[processoFilterCompany.value] || [];
+        processoFilterTurma.innerHTML = `<option value="">Selecione...</option>` +
+          turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+        processoFilterTurma.disabled = !processoFilterCompany.value;
+        processoSearchInput.disabled = true;
+        processoSearchInput.value = '';
+        processoSearchBtn.disabled = true;
+      };
+    }
+
+    // Turma filter change
+    processoFilterTurma.onchange = () => {
+      processoSearchInput.disabled = !processoFilterTurma.value;
+      if (!processoFilterTurma.value) {
+        processoSearchInput.value = '';
+        processoSearchBtn.disabled = true;
+      }
+    };
+
+    // Number input change
+    processoSearchInput.oninput = () => {
+      processoSearchBtn.disabled = !processoSearchInput.value.trim();
+    };
+
     // Setup search button
-    searchBtn.onclick = async () => {
-      const numero = parseInt(searchInput.value);
+    processoSearchBtn.onclick = async () => {
+      const numero = parseInt(processoSearchInput.value);
+      const selectedTurma = processoFilterTurma.value;
+
       if (!numero) {
         showToast('Digite um número de aluno válido', 'warning');
         return;
       }
 
-      searchBtn.disabled = true;
-      searchBtn.innerHTML = '<span class="spinner spinner--sm"></span>';
+      if (!selectedTurma) {
+        showToast('Selecione uma turma', 'warning');
+        return;
+      }
+
+      processoSearchBtn.disabled = true;
+      processoSearchBtn.innerHTML = '<span class="spinner spinner--sm"></span>';
 
       try {
-        // Search for student in database
+        // OPTIMIZED: Search for student by TURMA + NUMERO
         const studentsQuery = query(
           collection(db, 'students'),
+          where('turma', '==', selectedTurma),
           where('numero', '==', numero)
         );
         const studentsSnapshot = await getDocs(studentsQuery);
 
         if (studentsSnapshot.empty) {
-          showToast('Aluno não encontrado', 'warning');
+          showToast('Aluno não encontrado na turma selecionada', 'warning');
           return;
         }
 
@@ -653,14 +811,14 @@ export async function renderProcessoDisciplinarPage(container) {
         console.error('Erro ao buscar aluno:', error);
         showToast('Erro ao buscar: ' + error.message, 'error');
       } finally {
-        searchBtn.disabled = false;
-        searchBtn.innerHTML = `${icons.search} Buscar`;
+        processoSearchBtn.disabled = false;
+        processoSearchBtn.innerHTML = `${icons.search} Buscar`;
       }
     };
 
     // Allow Enter key to search
-    searchInput.onkeypress = (e) => {
-      if (e.key === 'Enter') searchBtn.click();
+    processoSearchInput.onkeypress = (e) => {
+      if (e.key === 'Enter' && !processoSearchBtn.disabled) processoSearchBtn.click();
     };
 
     modal.classList.add('active');
