@@ -1,22 +1,41 @@
 /**
  * Faltas Escolares Page - Manual Entry System
  * Gestão Centralizada FO - CMB
+ *
+ * OPTIMIZED: On-demand loading to reduce Firebase reads
+ * - Students are loaded ONLY when turma is selected
+ * - No automatic loading of all students on page load
  */
 
 import { db } from '../firebase/config.js';
 import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { getSession } from '../firebase/auth.js';
+import { getSession, getCompanyFilter } from '../firebase/auth.js';
 import {
   COLLECTIONS,
   COMPANY_NAMES,
+  COMPANY_SHORT_NAMES,
   USER_ROLES,
   TURMA_TO_COMPANY
 } from '../constants/index.js';
 import { icons } from '../utils/icons.js';
-import { getStudents } from '../firebase/database.js';
 import { showToast } from '../utils/toast.js';
 
-let allStudents = [];
+// Turmas por companhia (6º ao 3º EM)
+const TURMAS_POR_COMPANHIA = {
+  '6cia': ['601', '602', '603', '604', '605', '606'],
+  '7cia': ['701', '702', '703', '704', '705', '706'],
+  '8cia': ['801', '802', '803', '804', '805'],
+  '9cia': ['901', '902', '903', '904', '905'],
+  '1cia': ['101', '102', '103', '104'],
+  '2cia': ['201', '202', '203', '204'],
+  '3cia': ['301', '302', '303', '304']
+};
+
+// Cache de alunos por turma (evita re-leituras)
+const STUDENTS_BY_TURMA_CACHE = {};
+const STUDENTS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+let turmaStudents = []; // Students for selected turma only
 let historyRecords = [];
 let selectedStudents = [];
 
@@ -133,11 +152,47 @@ function formatDateValue(dateVal) {
 }
 
 /**
+ * Get students by turma with caching
+ * OPTIMIZATION: Only loads students for selected turma
+ */
+async function getStudentsByTurma(turma) {
+  if (!turma) return [];
+
+  const now = Date.now();
+  const cached = STUDENTS_BY_TURMA_CACHE[turma];
+
+  if (cached && (now - cached.timestamp) < STUDENTS_CACHE_TTL) {
+    console.log('[Faltas] Using cached students for turma:', turma);
+    return cached.data;
+  }
+
+  console.log('[Faltas] Loading students for turma:', turma);
+
+  const q = query(
+    collection(db, 'students'),
+    where('turma', '==', turma)
+  );
+
+  const snapshot = await getDocs(q);
+  const students = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  STUDENTS_BY_TURMA_CACHE[turma] = {
+    data: students,
+    timestamp: now
+  };
+
+  return students;
+}
+
+/**
  * Render Faltas Escolares Page
+ * OPTIMIZED: No automatic student loading - on-demand only
  */
 export async function renderFaltasEscolaresPage() {
   const pageContent = document.getElementById('page-content');
   const session = getSession();
+  const companyFilter = getCompanyFilter();
+  const isAdminOrComandoCA = session.role === 'admin' || session.role === 'comandoCA';
 
   // Inject styles
   if (!document.getElementById('faltas-styles')) {
@@ -147,12 +202,23 @@ export async function renderFaltasEscolaresPage() {
     document.head.appendChild(styleEl);
   }
 
-  // Load students for reference and filter by company
-  const allStudentsRaw = await getStudents();
-  allStudents = allStudentsRaw.filter(student => canSeeStudent(student, session));
-
-  // Reset state
+  // OPTIMIZED: Don't load students automatically - wait for turma selection
+  // This reduces initial reads from ~2700 to ~10
+  turmaStudents = [];
   selectedStudents = [];
+
+  // Build company options for Admin/ComandoCA
+  const companyOptions = Object.entries(COMPANY_SHORT_NAMES)
+    .map(([key, label]) => `<option value="${key}">${label}</option>`)
+    .join('');
+
+  // Build turma options based on user's company
+  const getTurmaOptionsForCompany = (company) => {
+    const turmas = TURMAS_POR_COMPANHIA[company] || [];
+    return turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+  };
+
+  const initialTurmaOptions = companyFilter ? getTurmaOptionsForCompany(companyFilter) : '';
 
   pageContent.innerHTML = `
     <div class="faltas-page">
@@ -160,7 +226,7 @@ export async function renderFaltasEscolaresPage() {
         <h1 class="page-title">Faltas Escolares</h1>
         <p class="page-subtitle">Registro manual de faltas do dia inteiro</p>
       </div>
-      
+
       <!-- Tabs -->
       <div class="faltas-tabs">
         <button class="faltas-tab active" data-tab="registro">
@@ -173,7 +239,7 @@ export async function renderFaltasEscolaresPage() {
           ${icons.clock} Histórico
         </button>
       </div>
-      
+
       <!-- Tab: Registro de Faltas -->
       <div id="tab-registro" class="faltas-tab-content active">
         <div class="card">
@@ -182,17 +248,42 @@ export async function renderFaltasEscolaresPage() {
           </div>
           <div class="card__body">
             <div class="faltas-form">
-              <div class="form-row">
-                <div class="form-group">
+              <div class="form-row" style="flex-wrap: wrap; gap: var(--space-3);">
+                <div class="form-group" style="min-width: 140px;">
                   <label class="form-label">Data</label>
                   <input type="date" id="input-data" class="form-input" value="${new Date().toISOString().split('T')[0]}">
                 </div>
-                <div class="form-group" style="flex: 2;">
+
+                ${isAdminOrComandoCA ? `
+                <div class="form-group" style="min-width: 140px;">
+                  <label class="form-label">Companhia</label>
+                  <select id="filter-company" class="form-select">
+                    <option value="">Selecione...</option>
+                    ${companyOptions}
+                  </select>
+                </div>
+                ` : ''}
+
+                <div class="form-group" style="min-width: 120px;">
+                  <label class="form-label">Turma</label>
+                  <select id="filter-turma" class="form-select" ${!companyFilter && isAdminOrComandoCA ? 'disabled' : ''}>
+                    <option value="">Selecione...</option>
+                    ${initialTurmaOptions}
+                  </select>
+                </div>
+
+                <div class="form-group" style="flex: 2; min-width: 200px;">
                   <label class="form-label">Números dos Alunos (separados por vírgula)</label>
-                  <input type="text" id="input-numeros" class="form-input" placeholder="Ex: 12001, 12002, 12003...">
+                  <input type="text" id="input-numeros" class="form-input" placeholder="Ex: 1, 2, 3..." disabled>
                 </div>
               </div>
-              
+
+              <p id="turma-hint" style="margin: var(--space-2) 0; font-size: var(--font-size-sm); color: var(--text-tertiary);">
+                ${isAdminOrComandoCA
+                  ? 'Selecione a companhia e a turma para habilitar o campo de números.'
+                  : 'Selecione a turma para habilitar o campo de números.'}
+              </p>
+
               <div id="preview-container" class="preview-container" style="display: none;">
                 <h4>Alunos selecionados:</h4>
                 <div id="preview-list" class="preview-list"></div>
@@ -257,6 +348,11 @@ export async function renderFaltasEscolaresPage() {
  * Setup Event Listeners
  */
 function setupEventListeners() {
+  const filterCompany = document.getElementById('filter-company');
+  const filterTurma = document.getElementById('filter-turma');
+  const inputNumeros = document.getElementById('input-numeros');
+  const turmaHint = document.getElementById('turma-hint');
+
   // Tab switching
   document.querySelectorAll('.faltas-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -271,8 +367,53 @@ function setupEventListeners() {
     });
   });
 
+  // Company filter change (Admin/ComandoCA only)
+  if (filterCompany) {
+    filterCompany.addEventListener('change', () => {
+      const company = filterCompany.value;
+      const turmas = TURMAS_POR_COMPANHIA[company] || [];
+      filterTurma.innerHTML = `<option value="">Selecione...</option>` +
+        turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+      filterTurma.disabled = !company;
+      inputNumeros.disabled = true;
+      inputNumeros.value = '';
+      turmaStudents = [];
+      selectedStudents = [];
+      document.getElementById('preview-container').style.display = 'none';
+      document.getElementById('btn-salvar').disabled = true;
+    });
+  }
+
+  // Turma filter change - load students for selected turma
+  filterTurma.addEventListener('change', async () => {
+    const turma = filterTurma.value;
+
+    if (!turma) {
+      inputNumeros.disabled = true;
+      inputNumeros.value = '';
+      turmaStudents = [];
+      selectedStudents = [];
+      document.getElementById('preview-container').style.display = 'none';
+      document.getElementById('btn-salvar').disabled = true;
+      return;
+    }
+
+    // Show loading hint
+    turmaHint.textContent = 'Carregando alunos da turma...';
+
+    try {
+      // Load students for selected turma (with cache)
+      turmaStudents = await getStudentsByTurma(turma);
+      inputNumeros.disabled = false;
+      turmaHint.textContent = `${turmaStudents.length} alunos na turma ${turma}. Digite os números separados por vírgula.`;
+    } catch (error) {
+      console.error('[Faltas] Error loading students:', error);
+      turmaHint.textContent = 'Erro ao carregar alunos. Tente novamente.';
+      inputNumeros.disabled = true;
+    }
+  });
+
   // Number input - real-time parsing
-  const inputNumeros = document.getElementById('input-numeros');
   let debounceTimer;
   inputNumeros.addEventListener('input', () => {
     clearTimeout(debounceTimer);
@@ -305,6 +446,7 @@ function setDefaultConsultaDates() {
 
 /**
  * Parse student numbers from input
+ * Uses turmaStudents (loaded on-demand) instead of allStudents
  */
 function parseStudentNumbers() {
   const input = document.getElementById('input-numeros').value;
@@ -318,12 +460,12 @@ function parseStudentNumbers() {
     .map(n => parseInt(n.trim()))
     .filter(n => !isNaN(n) && n > 0);
 
-  // Find matching students
+  // Find matching students from turmaStudents (loaded on-demand)
   selectedStudents = [];
   const notFound = [];
 
   numbers.forEach(num => {
-    const student = allStudents.find(s => s.numero === num);
+    const student = turmaStudents.find(s => s.numero === num);
     if (student) {
       if (!selectedStudents.find(s => s.numero === num)) {
         selectedStudents.push(student);

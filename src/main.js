@@ -26,16 +26,15 @@ async function init() {
   // Render main layout
   renderMainLayout(currentPage);
 
-  // OPTIMIZATION: Warm cache ONLY ONCE per session (not on every navigation)
-  // Check sessionStorage to prevent duplicate warming during hot-reload
-  const cacheWarmKey = 'cmb_cache_warmed_session';
-  const alreadyWarmed = sessionStorage.getItem(cacheWarmKey);
-
-  if (!alreadyWarmed) {
-    const companyFilter = getCompanyFilter();
-    warmCacheInBackground(companyFilter);
-    sessionStorage.setItem(cacheWarmKey, Date.now().toString());
-  }
+  // DISABLED: Cache warming removed to prevent 2.7k+ Firebase reads on page load
+  // Students and FOs are now loaded ON-DEMAND when user searches
+  // This reduces initial reads from ~2700 to ~10 (just config/auth)
+  // const cacheWarmKey = 'cmb_cache_warmed_session';
+  // const alreadyWarmed = sessionStorage.getItem(cacheWarmKey);
+  // if (!alreadyWarmed) {
+  //   warmCacheInBackground(companyFilter);
+  //   sessionStorage.setItem(cacheWarmKey, Date.now().toString());
+  // }
 
   // Load page content
   await loadPage(currentPage);
