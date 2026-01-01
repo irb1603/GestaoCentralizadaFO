@@ -351,7 +351,7 @@ export function renderExpandableCard(fo, studentData = {}, isExpanded = false, o
           
           ${!readOnly ? `
             <div class="expandable-card__transfer">
-              <button class="btn btn--warning btn--sm" data-action="concluir">Concluir</button>
+              <button class="btn btn--danger btn--sm" data-action="concluir">Concluir</button>
             </div>
           ` : ''}
         </div>

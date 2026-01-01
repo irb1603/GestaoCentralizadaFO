@@ -384,7 +384,13 @@ Detalhes: Nr do FO ${numeroFO} - Descrição do fato: ${descricao}`;
     btn.addEventListener('click', async (e) => {
       const card = e.target.closest('.expandable-card');
       const foId = card.dataset.foId;
-      await transferFO(foId, FO_STATUS.CONCLUIDO);
+
+      // Confirmation dialog
+      if (!confirm('Deseja realmente enviar este FO para Concluir?\n\nEle será movido para a página de Conclusão.')) {
+        return;
+      }
+
+      await transferFO(foId, FO_STATUS.CONCLUIR);
     });
   });
 
