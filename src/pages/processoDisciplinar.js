@@ -7,15 +7,15 @@ import { showToast } from '../utils/toast.js';
 import { getSession, getCompanyFilter } from '../firebase/auth.js';
 import { logAction } from '../services/auditLogger.js';
 
-// Turmas por companhia (6º ao 3º EM)
+// Turmas por companhia (6º ao 3º EM) - formato: ano + número da turma (601, 602...)
 const TURMAS_POR_COMPANHIA = {
-  '6cia': ['6A', '6B', '6C', '6D', '6E', '6F'],
-  '7cia': ['7A', '7B', '7C', '7D', '7E', '7F'],
-  '8cia': ['8A', '8B', '8C', '8D', '8E'],
-  '9cia': ['9A', '9B', '9C', '9D', '9E'],
-  '1cia': ['1A', '1B', '1C', '1D'],
-  '2cia': ['2A', '2B', '2C', '2D'],
-  '3cia': ['3A', '3B', '3C', '3D']
+  '6cia': ['601', '602', '603', '604', '605', '606'],
+  '7cia': ['701', '702', '703', '704', '705', '706'],
+  '8cia': ['801', '802', '803', '804', '805'],
+  '9cia': ['901', '902', '903', '904', '905'],
+  '1cia': ['101', '102', '103', '104'],
+  '2cia': ['201', '202', '203', '204'],
+  '3cia': ['301', '302', '303', '304']
 };
 
 /**

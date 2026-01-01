@@ -28,6 +28,22 @@ import {
   invalidateStudentCache
 } from '../services/cacheService.js';
 
+// Turmas por companhia (6º ao 3º EM) - formato: ano + número da turma (601, 602...)
+const TURMAS_POR_COMPANHIA = {
+  '6cia': ['601', '602', '603', '604', '605', '606'],
+  '7cia': ['701', '702', '703', '704', '705', '706'],
+  '8cia': ['801', '802', '803', '804', '805'],
+  '9cia': ['901', '902', '903', '904', '905'],
+  '1cia': ['101', '102', '103', '104'],
+  '2cia': ['201', '202', '203', '204'],
+  '3cia': ['301', '302', '303', '304']
+};
+
+// Cache para alunos por turma
+const STUDENTS_CACHE_KEY = 'dados_alunos_turma_';
+const STUDENTS_CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+let studentsCache = {};
+
 let allStudents = [];
 let currentEditStudent = null;
 
@@ -35,6 +51,20 @@ export async function renderDadosAlunosPage() {
   const pageContent = document.getElementById('page-content');
   const session = getSession();
   const companyFilter = getCompanyFilter();
+  const isAdminOrComandoCA = session.role === 'admin' || session.role === 'comandoCA';
+
+  // Build company options for Admin/ComandoCA
+  const companyOptions = Object.entries(COMPANY_SHORT_NAMES)
+    .map(([key, label]) => `<option value="${key}">${label}</option>`)
+    .join('');
+
+  // Build turma options based on user's company
+  const getTurmaOptionsForCompany = (company) => {
+    const turmas = TURMAS_POR_COMPANHIA[company] || [];
+    return turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+  };
+
+  const initialTurmaOptions = companyFilter ? getTurmaOptionsForCompany(companyFilter) : '';
 
   pageContent.innerHTML = `
     <div class="page-header">
@@ -53,33 +83,49 @@ export async function renderDadosAlunosPage() {
         ` : ''}
       </div>
     </div>
-    
+
     <!-- Search and Filter -->
     <div class="card" style="margin-bottom: var(--space-4);">
       <div class="card__body" style="padding: var(--space-4);">
-        <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center;">
-          ${isAdmin() ? `
-          <select class="form-select" id="filter-company" style="width: auto; min-width: 180px;">
-            <option value="">Todas as companhias</option>
-            ${Object.entries(COMPANY_NAMES).map(([key, name]) => `<option value="${key}">${name}</option>`).join('')}
-          </select>
-          ` : ''}
-          <div style="flex: 1; min-width: 200px; position: relative;">
-            <input type="text" class="form-input" id="search-aluno" 
-                   placeholder="Digite o número do aluno..." 
-                   style="padding-left: 40px;">
-            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary);">
-              ${icons.search}
-            </span>
+        <div style="display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: flex-end;">
+          ${isAdminOrComandoCA ? `
+          <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+            <label class="form-label">Companhia</label>
+            <select class="form-select" id="filter-company">
+              <option value="">Selecione...</option>
+              ${companyOptions}
+            </select>
           </div>
-          <button class="btn btn--primary" id="search-btn">
+          ` : ''}
+
+          <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+            <label class="form-label">Turma</label>
+            <select class="form-select" id="filter-turma" ${!companyFilter && isAdminOrComandoCA ? 'disabled' : ''}>
+              <option value="">Selecione...</option>
+              ${initialTurmaOptions}
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0; min-width: 120px;">
+            <label class="form-label">Número</label>
+            <input type="number" class="form-input" id="search-aluno"
+                   placeholder="Nº do aluno" style="width: 120px;" disabled>
+          </div>
+
+          <button class="btn btn--primary" id="search-btn" disabled>
             ${icons.search}
             <span>Buscar</span>
           </button>
-          <div style="display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--font-size-sm);">
+
+          <div style="display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--font-size-sm); margin-left: auto;">
             <span id="student-count">0</span> aluno(s)
           </div>
         </div>
+        <p style="margin-top: var(--space-2); font-size: var(--font-size-sm); color: var(--text-tertiary);">
+          ${isAdminOrComandoCA
+            ? 'Selecione a companhia, depois a turma e o número do aluno.'
+            : 'Selecione a turma e o número do aluno para buscar.'}
+        </p>
       </div>
     </div>
     
@@ -348,15 +394,37 @@ export async function renderDadosAlunosPage() {
   // This reduces initial reads from ~2600 to 0
 }
 
-async function loadStudentsData(studentNumber = '', forceRefresh = false) {
+// Cache functions
+function getCachedStudents(turma) {
+  const cacheKey = STUDENTS_CACHE_KEY + turma;
+  const cached = studentsCache[cacheKey];
+  if (cached && (Date.now() - cached.timestamp) < STUDENTS_CACHE_TTL) {
+    console.log('[DadosAlunos Cache] Using cached students for turma:', turma);
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedStudents(turma, students) {
+  const cacheKey = STUDENTS_CACHE_KEY + turma;
+  studentsCache[cacheKey] = {
+    data: students,
+    timestamp: Date.now()
+  };
+  console.log('[DadosAlunos Cache] Cached', students.length, 'students for turma:', turma);
+}
+
+function invalidateLocalCache() {
+  console.log('[DadosAlunos Cache] Invalidating all cache');
+  studentsCache = {};
+}
+
+async function loadStudentsData(studentNumber = '', selectedTurma = '', forceRefresh = false) {
   const container = document.getElementById('students-grid');
   const countEl = document.getElementById('student-count');
-  const companyFilter = getCompanyFilter();
-  const adminCompanySelect = document.getElementById('filter-company');
-  const selectedCompany = adminCompanySelect?.value || companyFilter;
 
-  // Require student number to search
-  if (!studentNumber || studentNumber.trim() === '') {
+  // Require turma to search
+  if (!selectedTurma) {
     container.innerHTML = `
       <div style="grid-column: 1 / -1;">
         <div class="card">
@@ -364,7 +432,7 @@ async function loadStudentsData(studentNumber = '', forceRefresh = false) {
             <div class="empty-state">
               <div class="empty-state__icon">${icons.search}</div>
               <div class="empty-state__title">Buscar Aluno</div>
-              <div class="empty-state__text">Digite o número do aluno para visualizar seus dados</div>
+              <div class="empty-state__text">Selecione a turma e o número do aluno para visualizar seus dados</div>
             </div>
           </div>
         </div>
@@ -382,16 +450,35 @@ async function loadStudentsData(studentNumber = '', forceRefresh = false) {
   `;
 
   try {
-    // Query by student number - VERY efficient: just 1 read!
-    let constraints = [where('numero', '==', parseInt(studentNumber))];
+    let students;
 
-    if (selectedCompany) {
-      constraints.push(where('company', '==', selectedCompany));
+    // Try to get from cache first
+    if (!forceRefresh) {
+      const cachedStudents = getCachedStudents(selectedTurma);
+      if (cachedStudents) {
+        students = cachedStudents;
+      }
     }
 
-    const q = query(collection(db, 'students'), ...constraints);
-    const snapshot = await getDocs(q);
-    const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // If not cached, fetch from Firebase
+    if (!students) {
+      // OPTIMIZED: Query by turma first, then filter by number client-side
+      const q = query(
+        collection(db, 'students'),
+        where('turma', '==', selectedTurma)
+      );
+      const snapshot = await getDocs(q);
+      students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Cache for future use
+      setCachedStudents(selectedTurma, students);
+    }
+
+    // Filter by student number if provided
+    if (studentNumber && studentNumber.trim() !== '') {
+      const numero = parseInt(studentNumber);
+      students = students.filter(s => s.numero === numero);
+    }
 
     allStudents = students;
     countEl.textContent = students.length;
@@ -404,7 +491,7 @@ async function loadStudentsData(studentNumber = '', forceRefresh = false) {
               <div class="empty-state">
                 <div class="empty-state__icon">${icons.users}</div>
                 <div class="empty-state__title">Aluno não encontrado</div>
-                <div class="empty-state__text">Verifique o número e tente novamente</div>
+                <div class="empty-state__text">Verifique a turma e o número e tente novamente</div>
               </div>
             </div>
           </div>
@@ -501,6 +588,8 @@ function renderStudentCard(student) {
 }
 
 function setupDadosAlunosEvents() {
+  const filterCompany = document.getElementById('filter-company');
+  const filterTurma = document.getElementById('filter-turma');
   const searchInput = document.getElementById('search-aluno');
   const searchBtn = document.getElementById('search-btn');
   const addBtn = document.getElementById('add-aluno-btn');
@@ -511,18 +600,55 @@ function setupDadosAlunosEvents() {
   const form = document.getElementById('aluno-form');
   const photoInput = document.getElementById('photo-input');
 
+  // Company filter change (Admin/ComandoCA only)
+  if (filterCompany) {
+    filterCompany.addEventListener('change', () => {
+      const company = filterCompany.value;
+      const turmas = TURMAS_POR_COMPANHIA[company] || [];
+      filterTurma.innerHTML = `<option value="">Selecione...</option>` +
+        turmas.map(t => `<option value="${t}">${t}</option>`).join('');
+      filterTurma.disabled = !company;
+      searchInput.disabled = true;
+      searchInput.value = '';
+      searchBtn.disabled = true;
+    });
+  }
+
+  // Turma filter change
+  if (filterTurma) {
+    filterTurma.addEventListener('change', () => {
+      const hasTurma = !!filterTurma.value;
+      searchInput.disabled = !hasTurma;
+      if (!hasTurma) {
+        searchInput.value = '';
+        searchBtn.disabled = true;
+      }
+    });
+  }
+
+  // Number input change
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      searchBtn.disabled = !searchInput.value.trim();
+    });
+  }
+
   // Search button click
   if (searchBtn) {
     searchBtn.addEventListener('click', () => {
-      loadStudentsData(searchInput.value.trim());
+      const turma = filterTurma?.value || '';
+      const numero = searchInput.value.trim();
+      loadStudentsData(numero, turma);
     });
   }
 
   // Enter key on search input
   if (searchInput) {
     searchInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        loadStudentsData(searchInput.value.trim());
+      if (e.key === 'Enter' && !searchBtn.disabled) {
+        const turma = filterTurma?.value || '';
+        const numero = searchInput.value.trim();
+        loadStudentsData(numero, turma);
       }
     });
   }
@@ -567,9 +693,13 @@ function setupCardActions() {
       if (confirm(`Deseja realmente excluir o aluno ${student?.nome || id}?`)) {
         try {
           await deleteDoc(doc(db, 'students', id));
-          invalidateStudentCache(student?.numero); // Invalidate cache
+          invalidateStudentCache(student?.numero); // Invalidate global cache
+          invalidateLocalCache(); // Invalidate local turma cache
           showToast('Aluno excluído com sucesso', 'success');
-          loadStudentsData(document.getElementById('search-aluno')?.value || '', true);
+
+          const turma = document.getElementById('filter-turma')?.value || '';
+          const numero = document.getElementById('search-aluno')?.value || '';
+          loadStudentsData(numero, turma, true);
         } catch (error) {
           console.error('Error deleting:', error);
           showToast('Erro ao excluir aluno', 'error');
@@ -692,10 +822,14 @@ async function handleFormSubmit(e) {
     const docId = id || String(numero);
     await setDoc(doc(db, 'students', docId), data, { merge: true });
 
-    invalidateStudentCache(numero); // Invalidate cache
+    invalidateStudentCache(numero); // Invalidate global cache
+    invalidateLocalCache(); // Invalidate local turma cache
     showToast(id ? 'Aluno atualizado com sucesso' : 'Aluno cadastrado com sucesso', 'success');
     closeModal();
-    loadStudentsData(document.getElementById('search-aluno')?.value || '', true);
+
+    const selectedTurma = document.getElementById('filter-turma')?.value || turma;
+    const numeroSearch = document.getElementById('search-aluno')?.value || '';
+    loadStudentsData(numeroSearch, selectedTurma, true);
   } catch (error) {
     console.error('Error saving:', error);
     showToast('Erro ao salvar aluno', 'error');
