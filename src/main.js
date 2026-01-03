@@ -212,6 +212,7 @@ async function renderDestinationPage(status, title) {
   const { icons } = await import('./utils/icons.js');
   const { db } = await import('./firebase/config.js');
   const { collection, getDocs, query, where } = await import('firebase/firestore');
+  const { logFirebaseRead } = await import('./services/firebaseLogger.js');
   const { getCompanyFilter } = await import('./firebase/auth.js');
   const { COMPANY_NAMES, formatDate, TIPO_FATO_LABELS, TIPO_FATO_COLORS } = await import('./constants/index.js');
 
@@ -245,6 +246,16 @@ async function renderDestinationPage(status, title) {
     }
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'fatosObservados',
+      documentCount: snapshot.size,
+      query: `status=${status}${companyFilter ? `, company=${companyFilter}` : ''}`,
+      fromCache: false,
+      source: 'main.renderDestinationPage'
+    });
+
     const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     const container = document.getElementById('destination-content');

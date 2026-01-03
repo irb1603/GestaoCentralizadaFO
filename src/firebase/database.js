@@ -19,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { getSession, getCompanyFilter } from './auth.js';
 import { logAction } from '../services/auditLogger.js';
+import { logFirebaseRead } from '../services/firebaseLogger.js';
 
 // Collection names
 const COLLECTIONS = {
@@ -53,6 +54,16 @@ export async function getStudents() {
     }
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: COLLECTIONS.STUDENTS,
+        documentCount: snapshot.size,
+        query: companyFilter ? `company=${companyFilter}` : 'all students',
+        fromCache: false,
+        source: 'database.getStudents'
+    });
+
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
@@ -67,6 +78,16 @@ export async function getStudentsByCompany(company) {
     );
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: COLLECTIONS.STUDENTS,
+        documentCount: snapshot.size,
+        query: `company=${company}`,
+        fromCache: false,
+        source: 'database.getStudentsByCompany'
+    });
+
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
@@ -90,10 +111,20 @@ export async function getStudentByNumber(numero, company = null) {
     }
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: COLLECTIONS.STUDENTS,
+        documentCount: snapshot.size,
+        query: `numero=${numero}${company ? `, company=${company}` : ''}`,
+        fromCache: false,
+        source: 'database.getStudentByNumber'
+    });
+
     if (snapshot.empty) return null;
 
-    const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() };
+    const docSnap = snapshot.docs[0];
+    return { id: docSnap.id, ...docSnap.data() };
 }
 
 /**
@@ -124,6 +155,16 @@ export async function updateStudent(studentId, updateData) {
 
     // Get previous data for audit
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: COLLECTIONS.STUDENTS,
+        documentCount: previousDoc.exists() ? 1 : 0,
+        query: `docId=${studentId}`,
+        fromCache: false,
+        source: 'database.updateStudent'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     const data = {
@@ -147,6 +188,16 @@ export async function deleteStudent(studentId) {
 
     // Get previous data for audit
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: COLLECTIONS.STUDENTS,
+        documentCount: previousDoc.exists() ? 1 : 0,
+        query: `docId=${studentId}`,
+        fromCache: false,
+        source: 'database.deleteStudent'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     await deleteDoc(docRef);
@@ -188,6 +239,23 @@ export async function getFatosObservados(filters = {}) {
     const q = query(collection(db, COLLECTIONS.FATOS_OBSERVADOS), ...constraints);
     const snapshot = await getDocs(q);
 
+    // Build query description for logging
+    const queryParts = [];
+    if (companyFilter) queryParts.push(`company=${companyFilter}`);
+    else if (filters.company) queryParts.push(`company=${filters.company}`);
+    if (filters.status) queryParts.push(`status=${filters.status}`);
+    if (filters.tipo) queryParts.push(`tipo=${filters.tipo}`);
+    if (filters.limit) queryParts.push(`limit=${filters.limit}`);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: COLLECTIONS.FATOS_OBSERVADOS,
+        documentCount: snapshot.size,
+        query: queryParts.length > 0 ? queryParts.join(', ') : 'all FOs',
+        fromCache: false,
+        source: 'database.getFatosObservados'
+    });
+
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
 
@@ -197,6 +265,15 @@ export async function getFatosObservados(filters = {}) {
 export async function getFatoObservado(foId) {
     const docRef = doc(db, COLLECTIONS.FATOS_OBSERVADOS, foId);
     const docSnap = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: COLLECTIONS.FATOS_OBSERVADOS,
+        documentCount: docSnap.exists() ? 1 : 0,
+        query: `docId=${foId}`,
+        fromCache: false,
+        source: 'database.getFatoObservado'
+    });
 
     if (!docSnap.exists()) return null;
 
@@ -232,6 +309,16 @@ export async function updateFatoObservado(foId, updateData) {
 
     // Get previous data for audit
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: COLLECTIONS.FATOS_OBSERVADOS,
+        documentCount: previousDoc.exists() ? 1 : 0,
+        query: `docId=${foId}`,
+        fromCache: false,
+        source: 'database.updateFatoObservado'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     const data = {
@@ -255,6 +342,16 @@ export async function deleteFatoObservado(foId) {
 
     // Get previous data for audit
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: COLLECTIONS.FATOS_OBSERVADOS,
+        documentCount: previousDoc.exists() ? 1 : 0,
+        query: `docId=${foId}`,
+        fromCache: false,
+        source: 'database.deleteFatoObservado'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     await deleteDoc(docRef);
@@ -347,6 +444,23 @@ export async function getAuditLogs(filters = {}) {
 
     const q = query(collection(db, COLLECTIONS.AUDIT_LOG), ...constraints);
     const snapshot = await getDocs(q);
+
+    // Build query description for logging
+    const queryParts = [];
+    if (session?.role === 'commander' && session?.company) queryParts.push(`company=${session.company}`);
+    else if (filters.company) queryParts.push(`company=${filters.company}`);
+    if (filters.action) queryParts.push(`action=${filters.action}`);
+    if (filters.userId) queryParts.push(`userId=${filters.userId}`);
+    queryParts.push(`limit=${filters.limit || 100}`);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: COLLECTIONS.AUDIT_LOG,
+        documentCount: snapshot.size,
+        query: queryParts.join(', '),
+        fromCache: false,
+        source: 'database.getAuditLogs'
+    });
 
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }

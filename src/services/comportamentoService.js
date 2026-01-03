@@ -21,6 +21,7 @@
 
 import { db } from '../firebase/config.js';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { logFirebaseRead } from './firebaseLogger.js';
 
 // Sanção impact values
 export const SANCAO_IMPACT = {
@@ -94,6 +95,16 @@ export async function getStudentSancoes(studentNumber) {
     );
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'fatosObservados',
+        documentCount: snapshot.size,
+        query: `studentNumber=${studentNumber}, sancaoDisciplinar != null`,
+        fromCache: false,
+        source: 'comportamentoService.getStudentSancoes'
+    });
+
     return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()

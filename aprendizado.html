@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 Aprendizado - Gestão Centralizada FO</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #d29922;
+            --accent-red: #f85149;
+            --border: #30363d;
+            --code-bg: #0d1117;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar h1 {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+            color: var(--accent);
+        }
+
+        .nav-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .nav-section h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.05em;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            border-radius: 6px;
+            margin-bottom: 2px;
+            font-size: 0.9rem;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: var(--bg-tertiary);
+            color: var(--accent);
+        }
+
+        .main {
+            margin-left: 280px;
+            flex: 1;
+            padding: 2rem 3rem;
+            max-width: 900px;
+        }
+
+        h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h3 {
+            font-size: 1.5rem;
+            margin: 2rem 0 1rem;
+            color: var(--accent);
+        }
+
+        h4 {
+            font-size: 1.1rem;
+            margin: 1.5rem 0 0.5rem;
+            color: var(--accent-green);
+        }
+
+        p {
+            margin-bottom: 1rem;
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Consolas', monospace;
+            background: var(--bg-tertiary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .keyword {
+            color: #ff7b72;
+        }
+
+        .string {
+            color: #a5d6ff;
+        }
+
+        .comment {
+            color: #8b949e;
+        }
+
+        .function {
+            color: #d2a8ff;
+        }
+
+        .number {
+            color: #79c0ff;
+        }
+
+        .info-box {
+            background: var(--bg-tertiary);
+            border-left: 4px solid var(--accent);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .info-box.warning {
+            border-left-color: var(--accent-orange);
+        }
+
+        .info-box.success {
+            border-left-color: var(--accent-green);
+        }
+
+        .diagram {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            font-family: monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.4;
+        }
+
+        ul,
+        ol {
+            margin: 1rem 0 1rem 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th,
+        td {
+            padding: 0.75rem;
+            text-align: left;
+            border: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+        }
+
+        .nav-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .nav-btn {
+            padding: 0.75rem 1.5rem;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .nav-btn:hover {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <h1>📚 Aprendizado</h1>
+
+            <div class="nav-section">
+                <h3>Fundamentos</h3>
+                <a href="#intro" class="nav-link active" data-section="intro">1. Introdução</a>
+                <a href="#vite" class="nav-link" data-section="vite">2. Vite & Build (Novo)</a>
+                <a href="#basics" class="nav-link" data-section="basics">3. JavaScript Básico (Novo)</a>
+                <a href="#arquitetura" class="nav-link" data-section="arquitetura">4. Arquitetura SPA</a>
+                <a href="#modules" class="nav-link" data-section="modules">5. ES Modules</a>
+                <a href="#routing" class="nav-link" data-section="routing">6. Roteamento</a>
+            </div>
+
+            <div class="nav-section">
+                <h3>Firebase</h3>
+                <a href="#firebase" class="nav-link" data-section="firebase">7. Firebase Basics</a>
+                <a href="#firestore" class="nav-link" data-section="firestore">8. Firestore e Dados</a>
+                <a href="#auth" class="nav-link" data-section="auth">9. Autenticação</a>
+            </div>
+
+            <div class="nav-section">
+                <h3>Performance</h3>
+                <a href="#cache" class="nav-link" data-section="cache">10. Cache Avançado</a>
+                <a href="#codesplit" class="nav-link" data-section="codesplit">11. Code Splitting</a>
+            </div>
+
+            <div class="nav-section">
+                <h3>Rede & Segurança</h3>
+                <a href="#network" class="nav-link" data-section="network">12. Conceitos de Rede</a>
+                <a href="#security" class="nav-link" data-section="security">13. Segurança</a>
+            </div>
+
+            <div class="nav-section">
+                <h3>UI/UX</h3>
+                <a href="#css" class="nav-link" data-section="css">14. CSS & Layout</a>
+                <a href="#components" class="nav-link" data-section="components">15. Componentes</a>
+            </div>
+        </nav>
+
+        <main class="main">
+            <!-- SEÇÃO 1: INTRODUÇÃO -->
+            <div id="intro" class="section active">
+                <h2>1. Introdução ao Projeto</h2>
+
+                <p>Bem-vindo ao guia de aprendizado do <strong>Sistema de Gestão Centralizada FO</strong>! Este
+                    documento irá te ensinar programação web moderna através de exemplos reais do código.</p>
+
+                <h3>O que é este projeto?</h3>
+                <p>É uma aplicação web para gerenciar registros disciplinares (Fatos Observados - FO) do Colégio Militar
+                    de Brasília. O sistema permite:</p>
+                <ul>
+                    <li>Registrar observações sobre alunos</li>
+                    <li>Aplicar sanções seguindo o regulamento RICM</li>
+                    <li>Gerar documentos PDF e DOCX</li>
+                    <li>Consultar estatísticas e relatórios</li>
+                </ul>
+
+                <h3>Tecnologias Utilizadas</h3>
+                <table>
+                    <tr>
+                        <th>Tecnologia</th>
+                        <th>Propósito</th>
+                    </tr>
+                    <tr>
+                        <td><code>JavaScript Vanilla</code></td>
+                        <td>Lógica da aplicação (sem frameworks)</td>
+                    </tr>
+                    <tr>
+                        <td><code>Vite</code></td>
+                        <td>Build tool e servidor de desenvolvimento</td>
+                    </tr>
+                    <tr>
+                        <td><code>Firebase Firestore</code></td>
+                        <td>Banco de dados em nuvem</td>
+                    </tr>
+                    <tr>
+                        <td><code>Firebase Storage</code></td>
+                        <td>Armazenamento de arquivos</td>
+                    </tr>
+                    <tr>
+                        <td><code>CSS Custom Properties</code></td>
+                        <td>Variáveis CSS para temas</td>
+                    </tr>
+                </table>
+
+                <h3>Estrutura de Arquivos</h3>
+                <pre>
+src/
+├── main.js          <span class="comment">// Ponto de entrada principal</span>
+├── components/      <span class="comment">// Componentes reutilizáveis (sidebar, header)</span>
+├── pages/           <span class="comment">// Módulos de cada página</span>
+├── services/        <span class="comment">// Lógica de negócios (cache, AI, email)</span>
+├── firebase/        <span class="comment">// Configuração e operações Firebase</span>
+├── constants/       <span class="comment">// Constantes do sistema</span>
+├── styles/          <span class="comment">// Arquivos CSS</span>
+└── utils/           <span class="comment">// Funções utilitárias</span>
+</pre>
+
+                <h3>📁 Detalhamento da Estrutura</h3>
+
+                <h4>Principais</h4>
+                <p><code>main.js</code>: O cérebro. Inicializa a app, verifica login e carrega a página correta.<br>
+                    <code>fo-main.js</code>: Lógica específica para o formulário público de FOs.
+                </p>
+
+                <h4>📁 pages/ (Controladores de Página)</h4>
+                <p>Cada arquivo aqui controla uma "tela" do sistema. Eles exportam uma função <code>render()</code> e
+                    <code>load()</code>.</p>
+                <ul>
+                    <li><code>inicial.js</code>: Dashboard do professor.</li>
+                    <li><code>admin.js</code>: Painel administrativo (gerenciar turmas, logs).</li>
+                    <li><code>processoDisciplinar.js</code>: Lógica complexa de processos e FOs.</li>
+                    <li><code>faltasEscolares.js</code>: Controle de frequência.</li>
+                </ul>
+
+                <h4>📁 services/ (Lógica de Negócios)</h4>
+                <p>Separam a lógica "pesada" da interface.</p>
+                <ul>
+                    <li><code>aiService.js</code>: Conecta com a API Gemini para sugestões de enquadramento.</li>
+                    <li><code>cacheService.js</code>: Gerencia o cache local para economizar leituras do Firebase.</li>
+                    <li><code>emailService.js</code>: Envio de notificações automáticas.</li>
+                    <li><code>ocrService.js</code>: Leitura de imagens/textos.</li>
+                </ul>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" disabled>← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('vite')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 2: VITE (NOVO) -->
+            <div id="vite" class="section">
+                <h2>2. Vite: O Motor do Projeto</h2>
+                <p>O <strong>Vite</strong> (palavra francesa para "rápido") é nossa ferramenta de build. Ao contrário de
+                    ferramentas antigas como Webpack, ele oferece:</p>
+                <ul>
+                    <li>🚀 <strong>Start Instantâneo:</strong> Usa ES Modules nativos do navegador durante o
+                        desenvolvimento.</li>
+                    <li>⚡ <strong>HMR (Hot Module Replacement):</strong> Se você edita um arquivo CSS ou JS, a alteração
+                        aparece instantaneamente sem recarregar a página inteira.</li>
+                </ul>
+
+                <h3>Comandos Principais</h3>
+                <pre>
+<span class="comment"># Roda o servidor de desenvolvimento local (localhost:5173)</span>
+<span class="keyword">npm</span> run dev
+
+<span class="comment"># Gera a versão de produção na pasta /dist</span>
+<span class="keyword">npm</span> run build
+
+<span class="comment"># Visualiza a versão de produção localmente</span>
+<span class="keyword">npm</span> run preview
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('intro')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('basics')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 3: BASIC JS (NOVO) -->
+            <div id="basics" class="section">
+                <h2>3. O "Beabá" do JavaScript & DOM</h2>
+                <p>JavaScript é a linguagem que dá vida à página. Aqui estão os blocos essenciais usados no projeto.</p>
+
+                <h3>Variáveis e Constantes</h3>
+                <pre>
+<span class="comment">// const: O valor não pode ser reatribuído (Use para 95% dos casos)</span>
+<span class="keyword">const</span> PI = <span class="number">3.14</span>;
+<span class="keyword">const</span> btn = document.<span class="function">getElementById</span>(<span class="string">'submit'</span>);
+
+<span class="comment">// let: O valor PODE mudar</span>
+<span class="keyword">let</span> contador = <span class="number">0</span>;
+contador = <span class="number">1</span>; <span class="comment">// OK</span>
+</pre>
+
+                <h3>Interagindo com a HTML (DOM)</h3>
+                <pre>
+<span class="comment">// 1. Pegar um elemento na tela</span>
+<span class="keyword">const</span> botao = document.<span class="function">getElementById</span>(<span class="string">'meuBotao'</span>);
+
+<span class="comment">// 2. Ouvir cliques (Event Listener)</span>
+botao.<span class="function">addEventListener</span>(<span class="string">'click'</span>, () => {
+    <span class="function">alert</span>(<span class="string">'Você clicou!'</span>);
+    
+    <span class="comment">// 3. Mudar conteúdo</span>
+    botao.innerText = <span class="string">'Clicado...'</span>;
+    
+    <span class="comment">// 4. Adicionar classe CSS</span>
+    botao.classList.<span class="function">add</span>(<span class="string">'loading'</span>);
+});
+</pre>
+
+                <h3>Funções e Async/Await</h3>
+                <p>Operações que demoram (banco de dados, API) são <strong>Assíncronas</strong>. Usamos
+                    <code>async/await</code> para esperar elas terminarem.</p>
+                <pre>
+<span class="keyword">async function</span> <span class="function">carregarAlunos</span>() {
+    <span class="comment">// A execução PAUSA aqui até os dados chegarem</span>
+    <span class="keyword">const</span> dados = <span class="keyword">await</span> firebase.<span class="function">getDocs</span>(...);
+    
+    console.<span class="function">log</span>(<span class="string">'Dados chegaram!'</span>); 
+}
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('vite')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('arquitetura')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 4: ARQUITETURA SPA -->
+            <div id="arquitetura" class="section">
+                <h2>4. Arquitetura SPA</h2>
+
+                <h3>O que é uma SPA?</h3>
+                <p><strong>Single Page Application</strong> (Aplicação de Página Única) é uma aplicação web que carrega
+                    uma única página HTML e atualiza dinamicamente o conteúdo sem recarregar a página inteira.</p>
+
+                <div class="diagram">
+                    ┌─────────────────────────────────────────────────────────┐
+                    │ APLICAÇÃO TRADICIONAL (Multi-Page) │
+                    │ │
+                    │ Usuário clica → Servidor processa → Nova página HTML │
+                    │ [Página 1] ──────────────────────→ [Página 2] │
+                    │ ↑ Recarrega tudo! │
+                    └─────────────────────────────────────────────────────────┘
+
+                    ┌─────────────────────────────────────────────────────────┐
+                    │ SPA (Single Page Application) │
+                    │ │
+                    │ Usuário clica → JavaScript atualiza → Mesmo HTML │
+                    │ [index.html] ─────────────────────→ [index.html] │
+                    │ ↑ Só troca o conteúdo interno! │
+                    └─────────────────────────────────────────────────────────┘
+                </div>
+
+                <h3>Vantagens da SPA</h3>
+                <ul>
+                    <li>⚡ <strong>Velocidade</strong>: Não recarrega CSS, JS, imagens a cada navegação</li>
+                    <li>🎯 <strong>UX Fluida</strong>: Transições suaves entre páginas</li>
+                    <li>📦 <strong>Estado Persistente</strong>: Dados em memória não são perdidos</li>
+                </ul>
+
+                <h3>Como Funciona no Projeto</h3>
+                <pre>
+<span class="comment">// src/main.js - Fluxo principal</span>
+
+<span class="keyword">async function</span> <span class="function">init</span>() {
+    <span class="comment">// 1. Verifica se usuário está logado</span>
+    <span class="keyword">if</span> (!<span class="function">isAuthenticated</span>()) {
+        <span class="function">renderLoginPage</span>();
+        <span class="keyword">return</span>;
+    }
+    
+    <span class="comment">// 2. Pega a página atual da URL (?page=inicial)</span>
+    <span class="keyword">const</span> urlParams = <span class="keyword">new</span> URLSearchParams(window.location.search);
+    <span class="keyword">const</span> currentPage = urlParams.<span class="function">get</span>(<span class="string">'page'</span>) || <span class="string">'inicial'</span>;
+    
+    <span class="comment">// 3. Renderiza o layout (sidebar + header)</span>
+    <span class="function">renderMainLayout</span>(currentPage);
+    
+    <span class="comment">// 4. Carrega o conteúdo da página dinamicamente</span>
+    <span class="keyword">await</span> <span class="function">loadPage</span>(currentPage);
+}
+</pre>
+
+                <div class="info-box">
+                    <strong>💡 Conceito Chave:</strong> O <code>index.html</code> é carregado uma única vez. Toda
+                    navegação posterior apenas troca o conteúdo do <code>#page-content</code>.
+                </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('basics')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('modules')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 5: ES MODULES -->
+            <div id="modules" class="section">
+                <h2>5. ES Modules</h2>
+
+                <h3>O que são Módulos?</h3>
+                <p>Módulos permitem dividir o código em arquivos separados, cada um com sua própria responsabilidade.
+                    Isso torna o código mais organizado e reutilizável.</p>
+
+                <h4>Exportando (disponibilizando funções)</h4>
+                <pre>
+<span class="comment">// src/firebase/auth.js</span>
+
+<span class="comment">// Named export - exporta com nome específico</span>
+<span class="keyword">export function</span> <span class="function">login</span>(username, password) {
+    <span class="comment">// lógica de login...</span>
+}
+
+<span class="keyword">export function</span> <span class="function">logout</span>() {
+    localStorage.<span class="function">removeItem</span>(<span class="string">'cmb_session'</span>);
+}
+
+<span class="comment">// Exportando constantes</span>
+<span class="keyword">export const</span> SESSION_KEY = <span class="string">'cmb_session'</span>;
+</pre>
+
+                <h4>Importando (usando funções de outros arquivos)</h4>
+                <pre>
+<span class="comment">// src/main.js</span>
+
+<span class="comment">// Importa funções específicas</span>
+<span class="keyword">import</span> { login, logout, getSession } <span class="keyword">from</span> <span class="string">'./firebase/auth.js'</span>;
+
+<span class="comment">// Importa tudo como um objeto</span>
+<span class="keyword">import</span> * <span class="keyword">as</span> authService <span class="keyword">from</span> <span class="string">'./firebase/auth.js'</span>;
+authService.<span class="function">login</span>(<span class="string">'Admin'</span>, <span class="string">'123'</span>);
+
+<span class="comment">// Import dinâmico (lazy loading)</span>
+<span class="keyword">const</span> { renderAdminPage } = <span class="keyword">await</span> <span class="keyword">import</span>(<span class="string">'./pages/admin.js'</span>);
+</pre>
+
+                <h3>Import Dinâmico (Code Splitting)</h3>
+                <p>O <code>import()</code> dinâmico carrega o arquivo <strong>apenas quando necessário</strong>,
+                    reduzindo o tamanho inicial da aplicação.</p>
+
+                <pre>
+<span class="comment">// Só carrega o módulo quando o usuário acessa a página</span>
+<span class="keyword">case</span> <span class="string">'admin'</span>:
+    <span class="keyword">const</span> { renderAdminPage } = <span class="keyword">await</span> <span class="keyword">import</span>(<span class="string">'./pages/admin.js'</span>);
+    <span class="keyword">await</span> <span class="function">renderAdminPage</span>();
+    <span class="keyword">break</span>;
+</pre>
+
+                <div class="info-box success">
+                    <strong>✅ Benefício:</strong> Se o usuário nunca acessar a página Admin, o código de
+                    <code>admin.js</code> nunca será baixado!
+                </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('arquitetura')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('routing')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 6: ROTEAMENTO -->
+            <div id="routing" class="section">
+                <h2>6. Roteamento</h2>
+
+                <h3>Query Parameters vs Hash Routing</h3>
+                <p>Existem diferentes formas de criar URLs em uma SPA:</p>
+
+                <table>
+                    <tr>
+                        <th>Método</th>
+                        <th>URL</th>
+                        <th>Usado neste projeto?</th>
+                    </tr>
+                    <tr>
+                        <td>Query Parameters</td>
+                        <td><code>/?page=admin</code></td>
+                        <td>✅ Sim</td>
+                    </tr>
+                    <tr>
+                        <td>Hash Routing</td>
+                        <td><code>/#/admin</code></td>
+                        <td>❌ Não</td>
+                    </tr>
+                    <tr>
+                        <td>History API</td>
+                        <td><code>/admin</code></td>
+                        <td>❌ Não (requer server)</td>
+                    </tr>
+                </table>
+
+                <h3>Como Funciona</h3>
+                <pre>
+<span class="comment">// Lendo a página atual da URL</span>
+<span class="keyword">const</span> urlParams = <span class="keyword">new</span> URLSearchParams(window.location.search);
+<span class="keyword">const</span> currentPage = urlParams.<span class="function">get</span>(<span class="string">'page'</span>);
+<span class="comment">// URL: /?page=admin  →  currentPage = 'admin'</span>
+
+<span class="comment">// Navegando para outra página (sem recarregar)</span>
+window.history.<span class="function">pushState</span>({}, <span class="string">''</span>, <span class="string">'?page=estatisticas'</span>);
+<span class="function">loadPage</span>(<span class="string">'estatisticas'</span>);
+</pre>
+
+                <h3>Tratando Navegação do Navegador</h3>
+                <pre>
+<span class="comment">// Quando usuário clica em Voltar/Avançar do navegador</span>
+window.<span class="function">addEventListener</span>(<span class="string">'popstate'</span>, () => {
+    <span class="keyword">const</span> urlParams = <span class="keyword">new</span> URLSearchParams(window.location.search);
+    <span class="keyword">const</span> currentPage = urlParams.<span class="function">get</span>(<span class="string">'page'</span>) || <span class="string">'inicial'</span>;
+    <span class="function">loadPage</span>(currentPage);
+});
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('modules')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('firebase')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 7: FIREBASE -->
+            <div id="firebase" class="section">
+                <h2>7. Firebase Basics</h2>
+
+                <h3>O que é Firebase?</h3>
+                <p>Firebase é uma plataforma do Google que oferece serviços de backend "prontos para usar":</p>
+
+                <ul>
+                    <li><strong>Firestore</strong>: Banco de dados NoSQL em tempo real</li>
+                    <li><strong>Authentication</strong>: Login com Google, email, etc.</li>
+                    <li><strong>Storage</strong>: Armazenamento de arquivos</li>
+                    <li><strong>Hosting</strong>: Hospedagem de sites estáticos</li>
+                </ul>
+
+                <h3>Inicialização</h3>
+                <pre>
+<span class="comment">// src/firebase/config.js</span>
+<span class="keyword">import</span> { initializeApp } <span class="keyword">from</span> <span class="string">'firebase/app'</span>;
+<span class="keyword">import</span> { getFirestore } <span class="keyword">from</span> <span class="string">'firebase/firestore'</span>;
+
+<span class="keyword">const</span> firebaseConfig = {
+    apiKey: <span class="string">"AIza..."</span>,
+    authDomain: <span class="string">"projeto.firebaseapp.com"</span>,
+    projectId: <span class="string">"meu-projeto"</span>,
+    <span class="comment">// ...</span>
+};
+
+<span class="keyword">const</span> app = <span class="function">initializeApp</span>(firebaseConfig);
+<span class="keyword">const</span> db = <span class="function">getFirestore</span>(app);
+
+<span class="keyword">export</span> { db };
+</pre>
+
+                <div class="info-box warning">
+                    <strong>⚠️ Importante:</strong> As credenciais do Firebase são protegidas por <strong>Regras de
+                        Segurança</strong> no Console do Firebase, não por serem "secretas".
+                </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('routing')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('firestore')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 8: FIRESTORE (EXPANDIDO) -->
+            <div id="firestore" class="section">
+                <h2>8. Firestore e Dados</h2>
+
+                <h3>Estrutura de Dados</h3>
+                <p>Firestore organiza dados em <strong>Coleções</strong> (pastas) e <strong>Documentos</strong>
+                    (arquivos JSON). Diferente de tabelas SQL, cada documento pode ter campos diferentes.</p>
+
+                <h3>O que é um "Dado"?</h3>
+                <p>No nosso contexto, um dado é um objeto Javascript que vira um JSON no banco:</p>
+                <pre>
+<span class="comment">// Exemplo de aluno (Documento)</span>
+{
+    <span class="string">"uid"</span>: <span class="string">"aluno123"</span>,          <span class="comment">// ID único</span>
+    <span class="string">"nome"</span>: <span class="string">"João Silva"</span>,       <span class="comment">// String</span>
+    <span class="string">"numero"</span>: <span class="number">1023</span>,             <span class="comment">// Number</span>
+    <span class="string">"turma"</span>: <span class="string">"101"</span>,             <span class="comment">// String</span>
+    <span class="string">"tags"</span>: [<span class="string">"monitor"</span>, <span class="string">"atleta"</span>], <span class="comment">// Array</span>
+    <span class="string">"ativo"</span>: <span class="keyword">true</span>,              <span class="comment">// Boolean</span>
+    <span class="string">"criadoEm"</span>: <span class="class">Timestamp</span>       <span class="comment">// Objeto especial de data do Firestore</span>
+}
+</pre>
+
+                <div class="diagram">
+                    Firestore
+                    ├── 📁 students (Coleção)
+                    │ ├── 📄 6cia_1001 (Documento)
+                    │ │ ├── numero: 1001
+                    │ │ ├── nome: "João Silva"
+                    │ │ ├── turma: "601"
+                    │ │ └── company: "6cia"
+                    │ └── 📄 6cia_1002
+                    │ └── ...
+                    ├── 📁 fatosObservados
+                    │ ├── 📄 abc123
+                    │ │ ├── studentNumbers: [1001, 1002]
+                    │ │ ├── status: "pendente"
+                    │ │ └── dataFato: "2026-01-03"
+                    │ └── ...
+                    └── 📁 users
+                    └── ...
+                </div>
+
+                <h3>CRUD Detalhado: Create, Read, Update, Delete</h3>
+
+                <h4>1. CREATE (Criar)</h4>
+                <pre>
+<span class="keyword">import</span> { addDoc, collection, doc, setDoc } <span class="keyword">from</span> <span class="string">'firebase/firestore'</span>;
+
+<span class="comment">// addDoc: O banco gera o ID (ex: "Xy7z...")</span>
+<span class="keyword">await</span> <span class="function">addDoc</span>(<span class="function">collection</span>(db, <span class="string">'fatosObservados'</span>), {
+    aluno: <span class="string">'João'</span>,
+    motivo: <span class="string">'Atraso'</span>
+});
+
+<span class="comment">// setDoc: NÓS definimos o ID (ex: "6cia_1001")</span>
+<span class="keyword">await</span> <span class="function">setDoc</span>(<span class="function">doc</span>(db, <span class="string">'students'</span>, <span class="string">'6cia_1001'</span>), {
+    numero: 1001,
+    nome: <span class="string">'João Silva'</span>
+});
+</pre>
+
+                <h4>2. READ (Ler)</h4>
+                <pre>
+<span class="keyword">import</span> { collection, getDocs, query, where } <span class="keyword">from</span> <span class="string">'firebase/firestore'</span>;
+
+<span class="comment">// Buscar todos os alunos da 6ª Companhia</span>
+<span class="keyword">const</span> q = <span class="function">query</span>(
+    <span class="function">collection</span>(db, <span class="string">'students'</span>),
+    <span class="function">where</span>(<span class="string">'company'</span>, <span class="string">'=='</span>, <span class="string">'6cia'</span>)
+);
+<span class="keyword">const</span> snapshot = <span class="keyword">await</span> <span class="function">getDocs</span>(q);
+
+snapshot.docs.<span class="function">forEach</span>(doc => {
+    console.<span class="function">log</span>(doc.id, doc.<span class="function">data</span>());
+});
+</pre>
+
+                <h4>3. UPDATE (Atualizar)</h4>
+                <pre>
+<span class="keyword">import</span> { doc, updateDoc } <span class="keyword">from</span> <span class="string">'firebase/firestore'</span>;
+
+<span class="comment">// Atualizar APENAS campos específicos (o resto permanece igual)</span>
+<span class="keyword">await</span> <span class="function">updateDoc</span>(<span class="function">doc</span>(db, <span class="string">'students'</span>, <span class="string">'6cia_1001'</span>), {
+    nome: <span class="string">'João da Silva'</span> <span class="comment">// Só muda o nome</span>
+});
+</pre>
+
+                <h4>4. DELETE (Apagar)</h4>
+                <pre>
+<span class="keyword">import</span> { doc, deleteDoc } <span class="keyword">from</span> <span class="string">'firebase/firestore'</span>;
+
+<span class="keyword">await</span> <span class="function">deleteDoc</span>(<span class="function">doc</span>(db, <span class="string">'students'</span>, <span class="string">'6cia_1001'</span>));
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('firebase')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('auth')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 9: AUTENTICAÇÃO -->
+            <div id="auth" class="section">
+                <h2>9. Sistema de Autenticação</h2>
+
+                <h3>Autenticação Customizada</h3>
+                <p>Este projeto usa um sistema de autenticação próprio (não o Firebase Auth):</p>
+
+                <pre>
+<span class="comment">// Contas definidas em código (src/firebase/auth.js)</span>
+<span class="keyword">export const</span> USER_ACCOUNTS = {
+    <span class="string">'Admin'</span>: { 
+        role: <span class="string">'admin'</span>, 
+        company: <span class="keyword">null</span>,  <span class="comment">// acessa tudo</span>
+        canEditAll: <span class="keyword">true</span>
+    },
+    <span class="string">'Cmt6cia'</span>: { 
+        role: <span class="string">'commander'</span>, 
+        company: <span class="string">'6cia'</span>,  <span class="comment">// apenas 6ª Cia</span>
+        canEditAll: <span class="keyword">false</span>
+    },
+};
+</pre>
+
+                <h3>Gerenciamento de Sessão</h3>
+                <pre>
+<span class="comment">// Login - salva sessão no localStorage</span>
+<span class="keyword">function</span> <span class="function">login</span>(username, password) {
+    <span class="keyword">const</span> session = {
+        username,
+        role: USER_ACCOUNTS[username].role,
+        company: USER_ACCOUNTS[username].company,
+        loginTime: Date.<span class="function">now</span>(),
+        lastActivity: Date.<span class="function">now</span>()
+    };
+    localStorage.<span class="function">setItem</span>(<span class="string">'cmb_session'</span>, JSON.<span class="function">stringify</span>(session));
+}
+
+<span class="comment">// Verificar sessão (expira após 30 min de inatividade)</span>
+<span class="keyword">function</span> <span class="function">getSession</span>() {
+    <span class="keyword">const</span> session = JSON.<span class="function">parse</span>(localStorage.<span class="function">getItem</span>(<span class="string">'cmb_session'</span>));
+    <span class="keyword">if</span> (!session) <span class="keyword">return null</span>;
+    
+    <span class="keyword">const</span> inactiveTime = Date.<span class="function">now</span>() - session.lastActivity;
+    <span class="keyword">if</span> (inactiveTime > 30 * 60 * 1000) {  <span class="comment">// 30 minutos</span>
+        <span class="function">logout</span>();
+        <span class="keyword">return null</span>;
+    }
+    
+    <span class="comment">// Atualiza última atividade</span>
+    session.lastActivity = Date.<span class="function">now</span>();
+    localStorage.<span class="function">setItem</span>(<span class="string">'cmb_session'</span>, JSON.<span class="function">stringify</span>(session));
+    <span class="keyword">return</span> session;
+}
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('firestore')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('cache')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 10: CACHE (EXPANDIDO) -->
+            <div id="cache" class="section">
+                <h2>10. Sistema de Cache Avançado</h2>
+
+                <h3>Por que Cache?</h3>
+                <p>Firebase cobra por <strong>leituras</strong>. Sem cache, cada vez que você abre uma página, ela lê
+                    todos os dados novamente. Com cache, os dados são reutilizados!</p>
+
+                <div class="diagram">
+                    SEM CACHE COM CACHE
+                    ──────────── ─────────
+                    Abrir página → 500 reads Abrir página → 0 reads (cache)
+                    Navegar → 500 reads Navegar → 0 reads (cache)
+                    Após 10 min → 500 reads
+                    ───────────────────────── ─────────────────────────
+                    Total: 1500 reads Total: 500 reads
+                </div>
+
+                <h3>Camadas de Armazenamento</h3>
+                <table>
+                    <tr>
+                        <th>Nível</th>
+                        <th>Storage</th>
+                        <th>Persiste?</th>
+                        <th>Uso no Projeto</th>
+                    </tr>
+                    <tr>
+                        <td>1. Memória</td>
+                        <td><code>Map()</code></td>
+                        <td>Não</td>
+                        <td>Cache de execução rápida</td>
+                    </tr>
+                    <tr>
+                        <td>2. Sessão</td>
+                        <td><code>sessionStorage</code></td>
+                        <td>Até fechar aba</td>
+                        <td>Dados de alunos e FOs</td>
+                    </tr>
+                    <tr>
+                        <td>3. Local</td>
+                        <td><code>localStorage</code></td>
+                        <td>Permanente</td>
+                        <td>Login e configurações</td>
+                    </tr>
+                </table>
+
+                <h3>Estratégia Cache-First (TTL)</h3>
+                <pre>
+<span class="comment">// Os dados expiram após um tempo definido (TTL - Time to Live)</span>
+<span class="keyword">const</span> CACHE_TTL = {
+    students: 30 * 60 * 1000,   <span class="comment">// 30 minutos</span>
+    fos: 10 * 60 * 1000,        <span class="comment">// 10 minutos</span>
+};
+
+<span class="comment">// Como funciona a leitura?</span>
+<span class="keyword">async function</span> <span class="function">getStudents</span>() {
+    <span class="comment">// 1. Verifica cache</span>
+    <span class="keyword">const</span> cached = sessionStorage.<span class="function">getItem</span>(<span class="string">'students_cache'</span>);
+    
+    <span class="comment">// 2. Se existe e não expirou, retorna cache (GRÁTIS)</span>
+    <span class="keyword">if</span> (cached && !isExpired(cached)) {
+        return JSON.parse(cached);
+    }
+    
+    <span class="comment">// 3. Se não, busca no Firebase (PAGA LEITURA)</span>
+    <span class="keyword">const</span> data = <span class="keyword">await</span> firebase.getDocs(...);
+    
+    <span class="comment">// 4. Salva no cache para a próxima vez</span>
+    sessionStorage.<span class="function">setItem</span>(<span class="string">'students_cache'</span>, JSON.stringify(data));
+    
+    <span class="keyword">return</span> data;
+}
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('auth')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('codesplit')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 11: CODE SPLITTING (EXPANDIDO) -->
+            <div id="codesplit" class="section">
+                <h2>11. Code Splitting</h2>
+
+                <h3>O Problema</h3>
+                <p>Se todo o código estiver em um único arquivo, o usuário precisa baixar TUDO antes de ver qualquer
+                    coisa. Isso deixa o carregamento inicial lento.</p>
+
+                <h3>A Solução</h3>
+                <p>Dividir o código em "chunks" (pedaços) que são carregados sob demanda.</p>
+
+                <pre>
+<span class="comment">// ANTES: Tudo importado no início (download pesado)</span>
+<span class="keyword">import</span> { renderAdminPage } <span class="keyword">from</span> <span class="string">'./pages/admin.js'</span>;
+<span class="keyword">import</span> { renderEstatisticasPage } <span class="keyword">from</span> <span class="string">'./pages/estatisticas.js'</span>;
+
+<span class="comment">// DEPOIS: Carrega só quando precisar (Lazy Loading)</span>
+<span class="keyword">switch</span> (page) {
+    <span class="keyword">case</span> <span class="string">'admin'</span>:
+        <span class="comment">// O navegador baixa este arquivo SÓ AGORA</span>
+        <span class="keyword">const</span> { renderAdminPage } = <span class="keyword">await</span> <span class="keyword">import</span>(<span class="string">'./pages/admin.js'</span>);
+        <span class="function">renderAdminPage</span>();
+        <span class="keyword">break</span>;
+}
+</pre>
+
+                <h3>Visualizando no Network</h3>
+                <p>Com essa técnica, o timeline de carregamento fica assim:</p>
+                <ol>
+                    <li>Login: baixa apenas <code>index.js</code> e <code>auth.js</code> (Leve)</li>
+                    <li>Usuário loga e vai para "Alunos": Baixa <code>alunos.js</code></li>
+                    <li>Usuário vai para "Admin": Baixa <code>admin.js</code></li>
+                </ol>
+
+                <h3>Resultado do Build</h3>
+                <pre>
+dist/
+├── main-abc123.js           <span class="comment">// 94 KB (carrega sempre)</span>
+├── admin-def456.js          <span class="comment">// 47 KB (carrega se acessar admin)</span>
+├── estatisticas-ghi789.js   <span class="comment">// 221 KB (carrega se acessar stats)</span>
+└── ...
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('cache')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('network')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 12: CONCEITOS DE REDE -->
+            <div id="network" class="section">
+                <h2>12. Conceitos de Rede</h2>
+
+                <h3>HTTP - O Protocolo da Web</h3>
+                <p>Toda comunicação entre navegador e servidor usa HTTP (Hypertext Transfer Protocol).</p>
+
+                <h4>Métodos HTTP</h4>
+                <table>
+                    <tr>
+                        <th>Método</th>
+                        <th>Uso</th>
+                        <th>Exemplo</th>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td>Buscar dados</td>
+                        <td>Listar alunos</td>
+                    </tr>
+                    <tr>
+                        <td><code>POST</code></td>
+                        <td>Criar dados</td>
+                        <td>Novo FO</td>
+                    </tr>
+                    <tr>
+                        <td><code>PUT/PATCH</code></td>
+                        <td>Atualizar</td>
+                        <td>Editar aluno</td>
+                    </tr>
+                    <tr>
+                        <td><code>DELETE</code></td>
+                        <td>Remover</td>
+                        <td>Excluir FO</td>
+                    </tr>
+                </table>
+
+                <h3>Latência</h3>
+                <p><strong>Latência</strong> é o tempo que leva para uma requisição ir até o servidor e voltar.</p>
+
+                <div class="diagram">
+                    Navegador ──[50ms]──► Firebase (São Paulo)
+                    ◄──[50ms]──
+                    Total: ~100ms de latência
+                </div>
+
+                <h3>WebSocket vs HTTP</h3>
+                <div class="info-box">
+                    <strong>💡 Firebase usa WebSocket!</strong> Por isso os dados atualizam em tempo real quando usamos
+                    <code>onSnapshot()</code>, mantendo uma conexão aberta constante.
+                </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('codesplit')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('security')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 13: SEGURANÇA -->
+            <div id="security" class="section">
+                <h2>13. Segurança</h2>
+
+                <h3>Regras do Firestore</h3>
+                <p>As regras definem QUEM pode fazer O QUÊ no banco de dados:</p>
+
+                <pre>
+<span class="comment">// firestore.rules</span>
+rules_version = <span class="string">'2'</span>;
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    <span class="comment">// Apenas usuários autenticados podem ler</span>
+    match /students/{studentId} {
+      allow read: <span class="keyword">if</span> request.auth != <span class="keyword">null</span>;
+      allow write: <span class="keyword">if</span> request.auth.token.role == <span class="string">'admin'</span>;
+    }
+  }
+}
+</pre>
+
+                <h3>XSS (Cross-Site Scripting)</h3>
+                <p>Nunca insira dados do usuário diretamente no HTML sem sanitização!</p>
+
+                <pre>
+<span class="comment">// ✅ SEGURO - Escapa caracteres especiais</span>
+<span class="keyword">function</span> <span class="function">escapeHTML</span>(str) {
+    <span class="keyword">return</span> str.<span class="function">replace</span>(/&/g, <span class="string">'&amp;amp;'</span>)
+              .<span class="function">replace</span>(/&lt;/g, <span class="string">'&amp;lt;'</span>)
+              .<span class="function">replace</span>(/>/g, <span class="string">'&amp;gt;'</span>);
+}
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('network')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('css')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 14: CSS -->
+            <div id="css" class="section">
+                <h2>14. CSS & Layout</h2>
+
+                <h3>Variáveis CSS (Custom Properties)</h3>
+                <pre>
+<span class="comment">/* src/styles/variables.css */</span>
+:root {
+    <span class="comment">/* Cores */</span>
+    --color-primary: <span class="string">#0ea5e9</span>;
+    --color-danger: <span class="string">#ef4444</span>;
+    
+    <span class="comment">/* Usando </span>*/
+    background: <span class="function">var</span>(--color-primary);
+}
+</pre>
+
+                <h3>Metodologia BEM</h3>
+                <p><strong>B</strong>lock <strong>E</strong>lement <strong>M</strong>odifier - convenção para nomear
+                    classes CSS:</p>
+
+                <pre>
+<span class="comment">&lt;!-- HTML usando BEM --&gt;</span>
+<span class="keyword">&lt;div</span> class=<span class="string">"card card--large"</span><span class="keyword">&gt;</span>
+    <span class="keyword">&lt;div</span> class=<span class="string">"card__header"</span><span class="keyword">&gt;</span>Título<span class="keyword">&lt;/div&gt;</span>
+    <span class="keyword">&lt;div</span> class=<span class="string">"card__body"</span><span class="keyword">&gt;</span>Conteúdo<span class="keyword">&lt;/div&gt;</span>
+<span class="keyword">&lt;/div&gt;</span>
+</pre>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('security')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('components')">Próximo →</button>
+                </div>
+            </div>
+
+            <!-- SEÇÃO 15: COMPONENTES -->
+            <div id="components" class="section">
+                <h2>15. Componentes Reutilizáveis</h2>
+
+                <h3>Padrão de Componente</h3>
+                <p>Cada componente tem duas funções principais:</p>
+
+                <pre>
+<span class="comment">// src/components/sidebar.js</span>
+
+<span class="comment">// 1. Função que RETORNA o HTML</span>
+<span class="keyword">export function</span> <span class="function">renderSidebar</span>(currentPage) {
+    <span class="keyword">return</span> <span class="string">`&lt;nav class="sidebar"&gt;...&lt;/nav&gt;`</span>;
+}
+
+<span class="comment">// 2. Função que CONFIGURA os eventos</span>
+<span class="keyword">export function</span> <span class="function">setupSidebarEvents</span>() {
+    <span class="comment">// addEventListeners...</span>
+}
+</pre>
+
+                <div class="info-box success">
+                    <strong>🎉 Parabéns!</strong> Você completou o guia de aprendizado! Agora explore o código real do
+                    projeto para ver esses conceitos em ação.
+                </div>
+
+                <div class="nav-buttons">
+                    <button class="nav-btn" onclick="goToSection('css')">← Anterior</button>
+                    <button class="nav-btn" onclick="goToSection('intro')">Voltar ao Início</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const sections = ['intro', 'vite', 'basics', 'arquitetura', 'modules', 'routing', 'firebase', 'firestore', 'auth', 'cache', 'codesplit', 'network', 'security', 'css', 'components'];
+
+        function goToSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+
+            // Show target section
+            const target = document.getElementById(sectionId);
+            const link = document.querySelector(`[data-section="${sectionId}"]`);
+
+            if (target) target.classList.add('active');
+            if (link) link.classList.add('active');
+
+            // Scroll to top
+            window.scrollTo(0, 0);
+
+            // Update URL
+            history.pushState({}, '', `#${sectionId}`);
+        }
+
+        // Handle nav clicks
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                goToSection(link.dataset.section);
+            });
+        });
+
+        // Handle hash changes
+        window.addEventListener('hashchange', () => {
+            const hash = window.location.hash.slice(1);
+            if (hash && sections.includes(hash)) {
+                goToSection(hash);
+            }
+        });
+
+        // Initial load from hash
+        if (window.location.hash) {
+            const hash = window.location.hash.slice(1);
+            if (sections.includes(hash)) {
+                goToSection(hash);
+            }
+        }
+    </script>
+</body>
+
+</html>

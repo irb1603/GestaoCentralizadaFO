@@ -32,7 +32,9 @@
       "Bash(ls:*)",
       "Bash(npm run dev:*)",
       "Bash(open http://localhost:5173)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ]
   }
 }

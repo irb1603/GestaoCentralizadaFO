@@ -33,6 +33,7 @@ import {
   cacheStudent,
   CACHE_TTL
 } from '../services/cacheService.js';
+import { logFirebaseRead } from '../services/firebaseLogger.js';
 
 let allFOs = [];
 let studentDataCache = {};
@@ -183,6 +184,16 @@ async function loadPendingFOs(searchTerm = '', tipoFilter = '', forceRefresh = f
       }
 
       const snapshot = await getDocs(q);
+
+      logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'fatosObservados',
+        documentCount: snapshot.size,
+        query: `status=pendente${companyFilter ? `, company=${companyFilter}` : ''}`,
+        fromCache: false,
+        source: 'inicial.renderInicialPage'
+      });
+
       allFOs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       // Cache the results (5 min TTL for pending FOs - more dynamic)
@@ -247,6 +258,16 @@ async function loadPendingFOs(searchTerm = '', tipoFilter = '', forceRefresh = f
         } else {
           try {
             const studentDoc = await getDoc(doc(db, 'students', String(studentNum)));
+
+            logFirebaseRead({
+              operation: 'getDoc',
+              collection: 'students',
+              documentCount: studentDoc.exists() ? 1 : 0,
+              query: `numero=${studentNum}`,
+              fromCache: false,
+              source: 'inicial.loadStudentData'
+            });
+
             if (studentDoc.exists()) {
               const studentData = studentDoc.data();
               studentDataCache[studentNum] = studentData;
@@ -459,6 +480,16 @@ async function saveCardChanges(foId, card) {
     // Get previous data for audit
     const docRef = doc(db, 'fatosObservados', foId);
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+      operation: 'getDoc',
+      collection: 'fatosObservados',
+      documentCount: previousDoc.exists() ? 1 : 0,
+      query: `foId=${foId}`,
+      fromCache: false,
+      source: 'inicial.saveCardChanges'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     const newData = {
@@ -499,6 +530,16 @@ async function transferFO(foId, newStatus) {
 
     // Get previous data
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+      operation: 'getDoc',
+      collection: 'fatosObservados',
+      documentCount: previousDoc.exists() ? 1 : 0,
+      query: `foId=${foId}`,
+      fromCache: false,
+      source: 'inicial.transferFO'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     const updates = {
@@ -536,6 +577,16 @@ async function deleteFO(foId) {
 
     // Get previous data
     const previousDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+      operation: 'getDoc',
+      collection: 'fatosObservados',
+      documentCount: previousDoc.exists() ? 1 : 0,
+      query: `foId=${foId}`,
+      fromCache: false,
+      source: 'inicial.deleteFO'
+    });
+
     const previousData = previousDoc.exists() ? previousDoc.data() : null;
 
     const updates = {

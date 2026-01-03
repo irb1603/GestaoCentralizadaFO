@@ -18,6 +18,7 @@ import { getSession } from '../firebase/auth.js';
 import { AI_CONFIGS_COLLECTION, AI_LOGS_COLLECTION, DEFAULT_AI_MODEL, DEFAULT_AI_PROVIDER, AI_PROVIDERS, AI_CONTEXT_DAYS, AI_CONFIG } from '../constants/aiConfig.js';
 import { generateSystemPrompt, generateContextPrompt, SUGGESTED_QUERIES } from '../utils/aiPrompts.js';
 import { getCachedAIData, cacheAIData, CACHE_TTL } from './cacheService.js';
+import { logFirebaseRead } from './firebaseLogger.js';
 
 /**
  * API URLs for each provider
@@ -117,6 +118,15 @@ async function getAIConfig() {
         console.log(`[AI] Fetching config from Firebase for ${configKey}`);
         const configRef = doc(db, AI_CONFIGS_COLLECTION, configKey);
         const configSnap = await getDoc(configRef);
+
+        logFirebaseRead({
+            operation: 'getDoc',
+            collection: AI_CONFIGS_COLLECTION,
+            documentCount: configSnap.exists() ? 1 : 0,
+            query: `configKey=${configKey}`,
+            fromCache: false,
+            source: 'aiService.getAIConfig'
+        });
 
         if (configSnap.exists()) {
             const config = configSnap.data();
@@ -513,6 +523,16 @@ async function getAllFOs(companyFilter) {
     }
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'fatosObservados',
+        documentCount: snapshot.size,
+        query: companyFilter ? `company=${companyFilter}` : 'all FOs',
+        fromCache: false,
+        source: 'aiService.getAllFOs'
+    });
+
     const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // Cache for 5 minutes (base data for many analyses - extended for fewer reads)
@@ -545,6 +565,16 @@ async function getStudentHistory(studentNumber, companyFilter) {
     try {
         // Get student basic data (1 read)
         const studentDoc = await getDoc(doc(db, 'students', String(studentNumber)));
+
+        logFirebaseRead({
+            operation: 'getDoc',
+            collection: 'students',
+            documentCount: studentDoc.exists() ? 1 : 0,
+            query: `studentNumber=${studentNumber}`,
+            fromCache: false,
+            source: 'aiService.getStudentHistory'
+        });
+
         if (!studentDoc.exists()) {
             return { error: `Aluno ${studentNumber} não encontrado no sistema.` };
         }
@@ -558,6 +588,16 @@ async function getStudentHistory(studentNumber, companyFilter) {
         );
 
         const snapshot = await getDocs(q);
+
+        logFirebaseRead({
+            operation: 'getDocs',
+            collection: 'fatosObservados',
+            documentCount: snapshot.size,
+            query: `studentNumber=${studentNumber}`,
+            fromCache: false,
+            source: 'aiService.getStudentHistory'
+        });
+
         const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         // Aggregate data
@@ -1062,6 +1102,16 @@ async function getAditamentoStats(companyFilter) {
     );
 
     const snapshot = await getDocs(q);
+
+    logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'fatosObservados',
+        documentCount: snapshot.size,
+        query: 'dataAdtBI != null' + (companyFilter ? `, company=${companyFilter}` : ''),
+        fromCache: false,
+        source: 'aiService.getAditamentoStats'
+    });
+
     let fos = snapshot.docs.map(doc => doc.data());
 
     if (companyFilter) {

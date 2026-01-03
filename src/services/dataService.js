@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { getSession, getCompanyFilter } from '../firebase/auth.js';
 import { logAction } from './auditLogger.js';
+import { logFirebaseRead } from './firebaseLogger.js';
 
 // Map turma prefix to company
 const TURMA_TO_COMPANY = {
@@ -167,6 +168,16 @@ export async function getStudentsByCompany() {
         }
 
         const snapshot = await getDocs(q);
+
+        logFirebaseRead({
+            operation: 'getDocs',
+            collection: 'students',
+            documentCount: snapshot.size,
+            query: companyFilter ? `company=${companyFilter}` : 'all students',
+            fromCache: false,
+            source: 'dataService.getStudentsByCompany'
+        });
+
         const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         // Sort client-side by turma then numero
@@ -220,6 +231,15 @@ export async function findStudentByNumber(numero, company = null) {
         // Try direct lookup first
         const docRef = doc(db, 'students', String(numero));
         const docSnap = await getDoc(docRef);
+
+        logFirebaseRead({
+            operation: 'getDoc',
+            collection: 'students',
+            documentCount: docSnap.exists() ? 1 : 0,
+            query: `numero=${numero}`,
+            fromCache: false,
+            source: 'dataService.findStudentByNumber'
+        });
 
         if (docSnap.exists()) {
             const student = { id: docSnap.id, ...docSnap.data() };
@@ -294,6 +314,16 @@ export async function updateStudent(studentId, updateData) {
 
     // Get previous data
     const prevDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: 'students',
+        documentCount: prevDoc.exists() ? 1 : 0,
+        query: `studentId=${studentId}`,
+        fromCache: false,
+        source: 'dataService.updateStudent'
+    });
+
     const previousData = prevDoc.exists() ? prevDoc.data() : null;
 
     // If turma changed, update company
@@ -323,6 +353,16 @@ export async function deleteStudent(studentId) {
 
     // Get previous data
     const prevDoc = await getDoc(docRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: 'students',
+        documentCount: prevDoc.exists() ? 1 : 0,
+        query: `studentId=${studentId}`,
+        fromCache: false,
+        source: 'dataService.deleteStudent'
+    });
+
     const previousData = prevDoc.exists() ? prevDoc.data() : null;
 
     await deleteDoc(docRef);

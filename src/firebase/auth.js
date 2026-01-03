@@ -12,6 +12,7 @@ import {
     setDoc,
     updateDoc
 } from 'firebase/firestore';
+import { logFirebaseRead } from '../services/firebaseLogger.js';
 
 // User accounts configuration
 export const USER_ACCOUNTS = {
@@ -100,6 +101,15 @@ export async function login(username, password) {
 
         const userDocPromise = getDoc(doc(db, 'users', username));
         const userDoc = await Promise.race([userDocPromise, timeoutPromise]);
+
+        logFirebaseRead({
+            operation: 'getDoc',
+            collection: 'users',
+            documentCount: userDoc.exists() ? 1 : 0,
+            query: `username=${username}`,
+            fromCache: false,
+            source: 'auth.login'
+        });
 
         if (userDoc.exists()) {
             const userData = userDoc.data();
@@ -269,6 +279,15 @@ export async function changePassword(targetUsername, newPassword) {
     // Check if document exists
     const userDocRef = doc(db, 'users', targetUsername);
     const userDoc = await getDoc(userDocRef);
+
+    logFirebaseRead({
+        operation: 'getDoc',
+        collection: 'users',
+        documentCount: userDoc.exists() ? 1 : 0,
+        query: `username=${targetUsername}`,
+        fromCache: false,
+        source: 'auth.changePassword'
+    });
 
     if (userDoc.exists()) {
         // Update existing document
