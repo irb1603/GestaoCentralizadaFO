@@ -32,18 +32,66 @@ const firebaseConfig = {
 const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId'];
 const missingKeys = requiredKeys.filter(key => !firebaseConfig[key]);
 
+let app = null;
+let db = null;
+let auth = null;
+
 if (missingKeys.length > 0) {
-    console.error('[Firebase] Missing environment variables:', missingKeys.map(k => `VITE_FIREBASE_${k.toUpperCase()}`).join(', '));
-    console.error('[Firebase] Please check your .env file or Netlify environment variables');
+    const errorMsg = `[Firebase] Variáveis de ambiente não configuradas: ${missingKeys.map(k => `VITE_FIREBASE_${k.toUpperCase()}`).join(', ')}`;
+    console.error(errorMsg);
+    console.error('[Firebase] Configure as variáveis no arquivo .env (local) ou nas Environment Variables do Netlify (produção)');
+
+    // Show error in UI
+    document.addEventListener('DOMContentLoaded', () => {
+        const appDiv = document.getElementById('app');
+        if (appDiv) {
+            appDiv.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1f2e; color: #fff;">
+                    <div style="background: #dc3545; color: white; padding: 1.5rem 2rem; border-radius: 8px; max-width: 600px; text-align: center;">
+                        <h2 style="margin: 0 0 1rem 0;">Erro de Configuração</h2>
+                        <p style="margin: 0 0 1rem 0;">As variáveis de ambiente do Firebase não estão configuradas.</p>
+                        <p style="margin: 0; font-size: 0.875rem; opacity: 0.9;">
+                            Configure as seguintes variáveis no Netlify:<br>
+                            <code style="background: rgba(0,0,0,0.2); padding: 0.25rem 0.5rem; border-radius: 4px; display: inline-block; margin-top: 0.5rem;">
+                                ${missingKeys.map(k => `VITE_FIREBASE_${k.toUpperCase()}`).join(', ')}
+                            </code>
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+    });
+} else {
+    try {
+        // Initialize Firebase
+        app = initializeApp(firebaseConfig);
+
+        // Initialize Firestore
+        db = getFirestore(app);
+
+        // Initialize Auth
+        auth = getAuth(app);
+
+        console.log('[Firebase] Inicializado com sucesso');
+    } catch (error) {
+        console.error('[Firebase] Erro ao inicializar:', error);
+
+        // Show error in UI
+        document.addEventListener('DOMContentLoaded', () => {
+            const appDiv = document.getElementById('app');
+            if (appDiv) {
+                appDiv.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1f2e; color: #fff;">
+                        <div style="background: #dc3545; color: white; padding: 1.5rem 2rem; border-radius: 8px; max-width: 600px; text-align: center;">
+                            <h2 style="margin: 0 0 1rem 0;">Erro do Firebase</h2>
+                            <p style="margin: 0;">${error.message}</p>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    }
 }
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-
-// Initialize Firestore
-export const db = getFirestore(app);
-
-// Initialize Auth
-export const auth = getAuth(app);
-
+export { db, auth };
 export default app;
