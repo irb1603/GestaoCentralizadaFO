@@ -6,6 +6,7 @@ import { renderLoginPage } from './pages/login.js';
 import { renderSidebar, setupSidebarEvents } from './components/sidebar.js';
 import { renderHeader, setupHeaderEvents } from './components/header.js';
 import { initAIChat, destroyAIChat } from './components/aiChat.js';
+import { renderFirebaseLoggerWidget, removeFirebaseLoggerWidget } from './components/firebaseLoggerWidget.js';
 import { ROUTES, PAGE_TITLES, FO_STATUS } from './constants/index.js';
 import { warmCache, resetCacheWarmedState, getCacheStats } from './services/cacheService.js';
 
@@ -14,6 +15,7 @@ async function init() {
   // Check authentication
   if (!isAuthenticated()) {
     destroyAIChat(); // Remove AI chat if logging out
+    removeFirebaseLoggerWidget(); // Remove Firebase logger widget if logging out
     resetCacheWarmedState(); // Reset cache state on logout
     renderLoginPage();
     return;
@@ -45,6 +47,9 @@ async function init() {
 
   // Initialize AI Chat (only for logged in users)
   initAIChat();
+
+  // Initialize Firebase Logger Widget (only for admin users)
+  renderFirebaseLoggerWidget();
 
   // Log cache stats for debugging
   console.log('[App] Cache stats:', getCacheStats());
