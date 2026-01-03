@@ -14,6 +14,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { icons } from '../utils/icons.js';
+import { logFirebaseRead } from '../services/firebaseLogger.js';
 
 let foRegistradores = [];
 
@@ -583,6 +584,14 @@ async function loadRegistradores() {
   try {
     const q = query(collection(db, 'foRegistradores'), orderBy('usuario'));
     const snapshot = await getDocs(q);
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'foRegistradores',
+      documentCount: snapshot.size,
+      query: 'orderBy usuario',
+      fromCache: false,
+      source: 'admin.loadRegistradores'
+    });
     foRegistradores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     renderRegistradores();
   } catch (error) {
@@ -1068,8 +1077,8 @@ function setupBulkDelete() {
 
   if (!deleteCompanySelect) return;
 
-  // Load all students
-  loadAllStudents();
+  // DON'T load all students automatically - will load on-demand when user interacts
+  // This prevents ~700+ reads just by visiting the Admin page
 
   // Delete by Turma: Company change
   deleteCompanySelect.addEventListener('change', async (e) => {
@@ -1084,7 +1093,10 @@ function setupBulkDelete() {
       return;
     }
 
-    // Get turmas for this company
+    // Get turmas for this company - load students on-demand if not loaded yet
+    if (allStudentsCache.length === 0) {
+      await loadAllStudents();
+    }
     const turmas = await getTurmasByCompany(company);
     deleteTurmaSelect.innerHTML = '<option value="">Selecione uma turma</option>' +
       turmas.map(t => `<option value="${t}">${t}</option>`).join('');
@@ -1232,6 +1244,14 @@ function setupBulkDelete() {
 async function loadAllStudents() {
   try {
     const snapshot = await getDocs(collection(db, 'students'));
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'students',
+      documentCount: snapshot.size,
+      query: 'all students (admin bulk delete)',
+      fromCache: false,
+      source: 'admin.loadAllStudents'
+    });
     allStudentsCache = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // Build turmas cache
@@ -1336,6 +1356,14 @@ async function loadAIConfigs() {
     // Load existing configs from Firebase
     const configs = {};
     const snapshot = await getDocs(collection(db, 'aiConfigs'));
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'aiConfigs',
+      documentCount: snapshot.size,
+      query: 'all configs',
+      fromCache: false,
+      source: 'admin.loadAIConfigs'
+    });
     snapshot.forEach(doc => {
       configs[doc.id] = doc.data();
     });
@@ -1345,11 +1373,11 @@ async function loadAIConfigs() {
       <form id="ai-configs-form">
         <div style="display: grid; gap: var(--space-4);">
           ${AI_COMPANIES.map(company => {
-            const config = configs[company.id] || {};
-            const provider = config.provider || 'groq';
-            const isGroq = provider === 'groq';
+      const config = configs[company.id] || {};
+      const provider = config.provider || 'groq';
+      const isGroq = provider === 'groq';
 
-            return `
+      return `
             <div style="padding: var(--space-4); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-light);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
                 <label style="font-weight: var(--font-weight-bold); font-size: var(--font-size-lg);">${company.label}</label>
@@ -1388,7 +1416,8 @@ async function loadAIConfigs() {
                 </select>
               </div>
             </div>
-          `;}).join('')}
+          `;
+    }).join('')}
         </div>
 
         <div style="margin-top: var(--space-4); display: flex; gap: var(--space-3);">
@@ -1576,6 +1605,14 @@ async function loadAILogs(selectedUser) {
       orderBy('timestamp', 'desc')
     );
     const snapshot = await getDocs(q);
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'aiConversations',
+      documentCount: snapshot.size,
+      query: `username=${selectedUser}`,
+      fromCache: false,
+      source: 'admin.loadAILogs'
+    });
     const logs = snapshot.docs.slice(0, 50).map(doc => ({ id: doc.id, ...doc.data() }));
 
     if (logs.length === 0) {

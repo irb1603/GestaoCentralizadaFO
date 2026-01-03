@@ -28,6 +28,7 @@ import {
   cacheFOList,
   invalidateStudentCache
 } from '../services/cacheService.js';
+import { logFirebaseRead } from '../services/firebaseLogger.js';
 
 let allStudents = [];
 let studentFOs = {};
@@ -321,6 +322,14 @@ async function loadComportamentoData(studentNumber = '') {
 
     const q = query(collection(db, 'students'), ...constraints);
     const snapshot = await getDocs(q);
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'students',
+      documentCount: snapshot.size,
+      query: `numero=${studentNumber}${selectedCompany ? `, company=${selectedCompany}` : ''}`,
+      fromCache: false,
+      source: 'comportamento.loadComportamentoData'
+    });
     const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     allStudents = students;
@@ -379,6 +388,14 @@ async function loadStudentFOs() {
       }
 
       const snapshot = await getDocs(q);
+      logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'fatosObservados',
+        documentCount: snapshot.size,
+        query: companyFilter ? `company=${companyFilter}` : 'all FOs',
+        fromCache: false,
+        source: 'comportamento.loadStudentFOs'
+      });
       fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       // Cache the results
@@ -420,6 +437,14 @@ async function loadStudentFOsOnDemand(studentNumber) {
     );
 
     const snapshot = await getDocs(q);
+    logFirebaseRead({
+      operation: 'getDocs',
+      collection: 'fatosObservados',
+      documentCount: snapshot.size,
+      query: `studentNumber=${studentNumber}`,
+      fromCache: false,
+      source: 'comportamento.loadStudentFOsOnDemand'
+    });
     const fos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // Sort by date

@@ -6,6 +6,7 @@ import { FO_STATUS, COMPANY_NAMES, COMPANY_SHORT_NAMES, formatDate, TURMA_TO_COM
 import { showToast } from '../utils/toast.js';
 import { getSession, getCompanyFilter } from '../firebase/auth.js';
 import { logAction } from '../services/auditLogger.js';
+import { logFirebaseRead } from '../services/firebaseLogger.js';
 
 // Turmas por companhia (6º ao 3º EM) - formato: ano + número da turma (601, 602...)
 const TURMAS_POR_COMPANHIA = {
@@ -117,8 +118,8 @@ export async function renderProcessoDisciplinarPage(container) {
       </div>
       <p class="search-hint" style="margin-top: var(--space-2); font-size: var(--font-size-sm); color: var(--text-tertiary);">
         ${isAdminOrComandoCA
-          ? 'Selecione a companhia, depois a turma e o número do aluno para buscar.'
-          : 'Selecione a turma e o número do aluno para buscar.'}
+      ? 'Selecione a companhia, depois a turma e o número do aluno para buscar.'
+      : 'Selecione a turma e o número do aluno para buscar.'}
       </p>
     </div>
     
@@ -334,6 +335,14 @@ export async function renderProcessoDisciplinarPage(container) {
         where('numero', '==', studentNum)
       );
       const studentSnapshot = await getDocs(studentQuery);
+      logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'students',
+        documentCount: studentSnapshot.size,
+        query: `turma=${selectedTurma}, numero=${studentNum}`,
+        fromCache: false,
+        source: 'processoDisciplinar.searchStudent'
+      });
 
       if (studentSnapshot.empty) {
         renderStudentsList([]);
@@ -351,6 +360,14 @@ export async function renderProcessoDisciplinarPage(container) {
         where('studentNumbers', 'array-contains', studentNum)
       );
       const fosSnapshot = await getDocs(fosQuery);
+      logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'fatosObservados',
+        documentCount: fosSnapshot.size,
+        query: `studentNumber=${studentNum}`,
+        fromCache: false,
+        source: 'processoDisciplinar.searchStudent'
+      });
 
       fosSnapshot.docs.forEach(doc => {
         const fo = { id: doc.id, ...doc.data() };
@@ -366,6 +383,14 @@ export async function renderProcessoDisciplinarPage(container) {
         where('studentNumber', '==', studentNum)
       );
       const termosSnapshot = await getDocs(termosQuery);
+      logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'termosCiencia',
+        documentCount: termosSnapshot.size,
+        query: `studentNumber=${studentNum}`,
+        fromCache: false,
+        source: 'processoDisciplinar.searchStudent'
+      });
       termosSnapshot.docs.forEach(doc => {
         const termo = { id: doc.id, ...doc.data() };
         if (!studentTermos[termo.studentNumber]) {
@@ -380,6 +405,14 @@ export async function renderProcessoDisciplinarPage(container) {
         where('studentNumber', '==', studentNum)
       );
       const outrosSnapshot = await getDocs(outrosQuery);
+      logFirebaseRead({
+        operation: 'getDocs',
+        collection: 'outrosDocumentos',
+        documentCount: outrosSnapshot.size,
+        query: `studentNumber=${studentNum}`,
+        fromCache: false,
+        source: 'processoDisciplinar.searchStudent'
+      });
       outrosSnapshot.docs.forEach(doc => {
         const outro = { id: doc.id, ...doc.data() };
         if (!studentOutrosDocs[outro.studentNumber]) {
@@ -768,6 +801,14 @@ export async function renderProcessoDisciplinarPage(container) {
           where('numero', '==', numero)
         );
         const studentsSnapshot = await getDocs(studentsQuery);
+        logFirebaseRead({
+          operation: 'getDocs',
+          collection: 'students',
+          documentCount: studentsSnapshot.size,
+          query: `turma=${selectedTurma}, numero=${numero}`,
+          fromCache: false,
+          source: 'processoDisciplinar.openProcessoModal'
+        });
 
         if (studentsSnapshot.empty) {
           showToast('Aluno não encontrado na turma selecionada', 'warning');
@@ -787,6 +828,14 @@ export async function renderProcessoDisciplinarPage(container) {
           where('studentNumbers', 'array-contains', numero)
         );
         const fosSnapshot = await getDocs(fosQuery);
+        logFirebaseRead({
+          operation: 'getDocs',
+          collection: 'fatosObservados',
+          documentCount: fosSnapshot.size,
+          query: `studentNumber=${numero}`,
+          fromCache: false,
+          source: 'processoDisciplinar.openProcessoModal'
+        });
         const fos = fosSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
         // Store in cache
@@ -801,6 +850,14 @@ export async function renderProcessoDisciplinarPage(container) {
           where('studentNumber', '==', String(numero))
         );
         const termosSnapshot = await getDocs(termosQuery);
+        logFirebaseRead({
+          operation: 'getDocs',
+          collection: 'termosCiencia',
+          documentCount: termosSnapshot.size,
+          query: `studentNumber=${numero}`,
+          fromCache: false,
+          source: 'processoDisciplinar.openProcessoModal'
+        });
         const termos = termosSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         studentTermos[numero] = termos;
 
