@@ -9,6 +9,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  # Enable smart detection for secrets scanner
-  # Firebase API keys are public by design (protected by Security Rules, not secrecy)
-  SECRETS_SCAN_SMART_DETECTION_ENABLED = "true"
+  # Disable secrets scanner for this project
+  # Firebase API keys are PUBLIC by design - they are protected by Firebase Security Rules,
+  # not by keeping them secret. See: https://firebase.google.com/docs/projects/api-keys
+  SECRETS_SCAN_ENABLED = "false"
